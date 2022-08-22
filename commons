@@ -1,0 +1,22 @@
+#!/bin/bash
+
+# a repo with files used below
+export COMMON_GIT=""
+export PROFILE_PIC="common/tierm.jpg"
+# wallpaper
+export WALLP="common/XT39323.jpg"
+# lock screen background, also used as sddm background
+export LOCKS="common/windowslock.jpg"
+# uses a script shipped with it, won't work with almost any other theme
+export GRUB_THEME="common/Graphite-grub2-theme.tar.xz"
+# a simple profile that enables the theme
+export KONSOLE_PROFILE="my/CustomProfile.profile"
+export KONSOLE_THEME="common/MateriaDark.colorscheme"
+# manually edited xml files meant to disable session toolbar
+# can be found at https://github.com/KDE/konsole/blob/master/desktop/
+export KONSOLE_TOOLBARS_FIX=(common/{konsole,session}ui.rc)
+export SPLASH_THEME="common/BeautifulTreeAnimation.tar.gz"
+# a desktop file template for ghidra sre
+export GHIDRA_TEMPL="my/Ghidra.desktop"
+# a mimeapps.list config file
+export DEFAULT_APPS="my/mimeapps.list"

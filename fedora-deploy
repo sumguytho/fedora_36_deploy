@@ -1,0 +1,626 @@
+#!/bin/bash
+# Fedora Workstation 36
+
+# can't figure out:
+#	change session type to x11 from wayland in sddm using command line
+#	check whether grub / refind theme installs fine, somehow
+#	idk if it's possible to change chrome extension settings using cli
+
+#	can't make system reconfigure after changing defaults, dbus-send doesn't work
+#	dbus-monitor says
+#	dbus-send --system --dest=org.kde.launcher5 /KLauncher org.kde.KLauncher.reparseConfiguration
+#	https://www.ghacks.net/2018/03/28/how-to-set-default-program-file-associations-in-kde5-plasma/
+#	kbuildsycoca5 rebuilds system configuration
+
+#	qt creator
+#	last version that allows installation without account is
+#	https://download.qt.io/official_releases/qt/5.12/5.12.10/
+#	qt cli installer
+#	https://github.com/miurahr/aqtinstall
+#	electronjs?
+
+#	couldn't figure out how to make preview show on click, settled for 250ms tooltip delay
+
+#	kactivitymanagerd-statsrc for menu favourites
+#	doesn't do anything, it's done using dbus
+
+#	hardinfo requires xorg-x11-utils from RPMUnited, i-nex seems to be fine
+
+# 	file-roller? VirtualBox or qemu?
+# 	maybe autohotkey on wine
+
+# 	right ctrl is just a virtualbox host key thing
+
+
+# TODO: add trash, computer to desktop
+# settings for steam and other apps
+# scrolling in terminal mode using scroll lock, check whether its possible to get a list of launcher favourites
+
+repos(){
+	succ_echo "installing RPM Fusion repositories..."
+	sudo dnf install \
+	  https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm -y
+	sudo dnf install \
+	  https://download1.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-$(rpm -E %fedora).noarch.rpm -y
+	succ_echo "installing third-party repositories..."
+	sudo dnf install fedora-workstation-repositories -y
+	succ_echo "enabling google chrome repository..."
+	sudo dnf config-manager --set-enabled google-chrome
+	succ_echo "adding double commander repository..."
+	sudo dnf config-manager --add-repo https://download.opensuse.org/repositories/home:Alexx2000/Fedora_36/home:Alexx2000.repo
+	succ_echo "adding tor repository..."
+	cat << EOF | sudo tee -a /etc/yum.repos.d/Tor.repo
+[tor]
+name=Tor for Fedora \$releasever - \$basearch
+baseurl=https://rpm.torproject.org/fedora/\$releasever/\$basearch
+enabled=1
+gpgcheck=1
+gpgkey=https://rpm.torproject.org/fedora/public_gpg.key
+cost=100
+EOF
+	succ_echo "adding vs-codium repository..."
+	sudo rpmkeys --import https://gitlab.com/paulcarroty/vscodium-deb-rpm-repo/-/raw/master/pub.gpg
+	printf "[gitlab.com_paulcarroty_vscodium_repo]\nname=download.vscodium.com\nbaseurl=https://download.vscodium.com/rpms/\nenabled=1\ngpgcheck=1\nrepo_gpgcheck=1\ngpgkey=https://gitlab.com/paulcarroty/vscodium-deb-rpm-repo/-/raw/master/pub.gpg\nmetadata_expire=1h" | sudo tee -a /etc/yum.repos.d/vscodium.repo
+}
+
+main_packages(){
+	succ_echo "installing main apps..."
+	sudo dnf install $DNF_PACKAGES -y
+	succ_echo "installing pip..."
+	python3 -m pip install --upgrade pip
+	succ_echo "installing virtualenv..."
+	pip3 install --user virtualenv
+}
+
+layouts(){
+	succ_echo "adding keyboard layouts..."
+	kwriteconfig5 --file kxkbrc --group Layout --key Use --type bool 1
+	kwriteconfig5 --file kxkbrc --group Layout --key ResetOldOptions --type bool 1
+	kwriteconfig5 --file kxkbrc --group Layout --key DisplayNames 'ENG,RUS'
+	kwriteconfig5 --file kxkbrc --group Layout --key VariantList ','
+	kwriteconfig5 --file kxkbrc --group Layout --key LayoutList 'us,ru'
+	kwriteconfig5 --file kxkbrc --group Layout --key Options 'grp:lalt_lshift_toggle'
+}
+
+numlock(){
+	succ_echo "enabling numlock on startup..."
+	sudo sed -i '/\[General\]/a Numlock=on' /etc/sddm.conf
+	# 0 means on, that's so awesome...
+	kwriteconfig5 --file kcminputrc --group Keyboard --key NumLock '0'
+}
+
+wallpaper(){
+	succ_echo "changing wallpaper..."
+	mkdir -p ~/Pictures/wallpapers
+	sudo cp $WALLP $WALLP_TARG
+	sudo chmod 777 $WALLP_TARG
+	rm -f ~/Pictures/wallpapers/$WALLP_BASE
+	ln -s $WALLP_TARG ~/Pictures/wallpapers/
+	qdbus org.kde.plasmashell /PlasmaShell evaluateScript "$(cat wallp-script.js | envsubst)"
+}
+
+kicker(){
+	succ_echo "replacing kickoff wiget with kicker..."
+	qdbus org.kde.plasmashell /PlasmaShell evaluateScript "$(<kicker-script.js)"
+	
+	UNNECESSARY_ARR=(\
+		applications:org.kde.dolphin.desktop \
+		applications:org.kde.konsole.desktop \
+		applications:org.kde.kontact.desktop \
+		preferred://browser \
+		)
+	succ_echo "unlinking unnecessary resources from favourites:"
+	for res in ${UNNECESSARY_ARR[*]}
+	do
+		succ_echo -e "\t $res"
+		qdbus org.kde.ActivityManager /ActivityManager/Resources/Linking UnlinkResourceFromActivity \
+			"org.kde.plasma.favorites.applications" "$res" ":any"
+	done
+}
+
+splash(){
+	succ_echo "installing splash theme..."
+	mkdir -p ~/.local/share/plasma/look-and-feel/
+	tar -zxf $SPLASH_THEME -C ~/.local/share/plasma/look-and-feel/
+	SPLASH_BASE=$(basename $SPLASH_THEME)
+	kwriteconfig5 --file ksplashrc --group KSplash --key Theme "${SPLASH_BASE%%.*}"
+}
+
+sddm_bg(){
+	succ_echo "setting sddm background..."
+	sudo cp $LOCKS $LOCKS_TARG
+	sudo chmod 777 $LOCKS_TARG
+	rm -f ~/Pictures/wallpapers/$LOCKS_BASE
+	ln -s $LOCKS_TARG ~/Pictures/wallpapers/
+	sudo sed -i "s/^background=.*/background=$LOCKSE_TARG/g" /usr/share/sddm/themes/01-breeze-fedora/theme.conf.user
+}
+
+sddm_cursor(){
+	succ_echo "changing sddm cursor pack..."
+	sudo sed -i "/\[Theme\]/a CursorTheme=Breeze_Snow" /etc/sddm.conf
+}
+
+sddm_tm_fmt(){
+	succ_echo "changing sddm time format..."
+	sudo sed -i "s/Qt.formatTime(timeSource.data\[\"Local\"\]\[\"DateTime\"\])/Qt.formatTime(timeSource.data\[\"Local\"\]\[\"DateTime\"\], \"hh:mm:ss\")/g" /usr/share/sddm/themes/01-breeze-fedora/components/Clock.qml
+}
+
+sddm_tweaks(){
+	sddm_bg
+	sddm_cursor
+	sddm_tm_fmt
+}
+
+lock_bg(){
+	succ_echo "changing lock screen background..."
+	kwriteconfig5 --file kscreenlockerrc --group Greeter --group Wallpaper --group org.kde.image --group General --key Image "$LOCKS"
+}
+
+konsole_theme(){
+	succ_echo "adding konsole theme..."
+	mkdir -p ~/.local/share/konsole
+	cp $KONSOLE_THEME ~/.local/share/konsole/
+	cp $KONSOLE_PROFILE ~/.local/share/konsole/
+	kwriteconfig5 --file konsolerc --group 'Desktop Entry' --key DefaultProfile "$(basename $KONSOLE_PROFILE)"
+}
+
+konsole_toolbars(){
+	succ_echo "disabling konsole toolbars..."
+	mkdir -p ~/.local/share/kxmlgui5/konsole
+	for file in "${KONSOLE_TOOLBARS_FIX[@]}"; do
+		cp $file ~/.local/share/kxmlgui5/konsole/
+	done
+}
+
+konsole_tweaks(){
+	konsole_theme
+	konsole_toolbars
+}
+
+clock_tweak(){
+	succ_echo "changing digital clock datetime format..."
+	qdbus org.kde.plasmashell /PlasmaShell evaluateScript "$(cat date-format-script.js)"
+}
+
+locale_tweak(){
+	succ_echo "changing measurements and date locale and format..."
+	kwriteconfig5 --file plasma-localerc --group 'Formats' --key LC_MEASUREMENT 'C'
+	kwriteconfig5 --file plasma-localerc --group 'Formats' --key LC_TIME 'C'
+}
+
+cursor_tweak(){
+	succ_echo "changing cursor pack..."
+	plasma-apply-cursortheme Breeze_Snow
+}
+
+gtk_theme_tweak(){
+	succ_echo "changing gtk theme..."
+	qdbus org.kde.GtkConfig /GtkConfig setGtkTheme 'Breeze'
+}
+
+showdesktop_tweak(){
+	succ_echo "changing show desktop to minimize..."
+	qdbus org.kde.plasmashell /PlasmaShell evaluateScript "$(cat minimize-scipt.js)"
+}
+
+panel_reorder_tweak(){
+	succ_echo "changing panel applets order..."
+	qdbus org.kde.plasmashell /PlasmaShell evaluateScript "$(cat reorder-script.js)"
+}
+
+# https://fedoraproject.org/wiki/GRUB_2
+# https://store.kde.org/p/1757215 ## old theme is https://store.kde.org/p/1000140
+# https://www.reddit.com/r/Fedora/comments/swhqsi/grub_customization_issue/
+# finished, no idea whether this is gonna work
+# hence it's not called anywhere
+grub_theme(){
+	succ_echo 'installing grub theme...'
+	sudo tar -xf $GRUB_THEME -C $HOME
+	pushd $PWD
+	cd ~/grub2
+	sudo konsole -e "./install.sh -b"
+	cd ..
+	rm -rf grub2
+	popd
+	
+	sudo grub2-mkconfig -o /etc/grub2.cfg
+	sudo grub2-mkconfig -o /etc/grub2-efi.cfg
+	sudo grub2-mkconfig -o /boot/grub2/grub.cfg
+}
+
+preview_delay_tweak(){
+	succ_echo "changing tooltip delay..."
+	# i guess that's the closest i can get to tooltip on click
+	kwriteconfig5 --file ~/.config/plasmarc --group PlasmaToolTips --key Delay 250
+}
+
+user_avatar_tweak(){
+	succ_echo "changing user profile picture..."
+	sudo mkdir -p /var/lib/AccountsService/icons/
+	sudo cp $PROFILE_PIC /var/lib/AccountsService/icons/$USER
+	sudo chmod 644 /var/lib/AccountsService/icons/$USER
+}
+
+shell_prompt_format(){
+	succ_echo "changing shell prompt format..."
+	TextReset="\e[0m"
+	Gray="\e[00;37m"
+	BoldCyan="\e[01;36m"
+	White="\e[01;37m"
+	BoldBlue="\e[01;34m"
+	BoldGreen="\e[01;32m"
+	PS1="\n\[${BoldGreen}\]\u\[${TextReset}\]\[${Gray}\]@\[${TextReset}\]\[${BoldBlue}\]\h\[${TextReset}\]\[${Gray}\] \t \[${TextReset}\]\[${BoldCyan}\]\w\[${TextReset}\]\[${White}\] \[${TextReset}\]\n$ "
+	sed -i "s/^PS1=.*//g" ~/.bashrc
+	echo "PS1=\"$PS1\"" | tee -a ~/.bashrc
+}
+
+screensaving_tweaks(){
+	succ_echo "changing screensaving and screen locking behaviour..."
+	kwriteconfig5 --file kscreenlockerrc --group Daemon --key Autolock --type bool 0
+	kwriteconfig5 --file powermanagementprofilesrc --group AC --group DPMSControl --key idleTime "600"
+	kwriteconfig5 --file powermanagementprofilesrc --group AC --group SuspendSession --key idleTime "1800000"
+	kwriteconfig5 --file powermanagementprofilesrc --group AC --group SuspendSession --key suspendThenHibernate --type bool 0
+	kwriteconfig5 --file powermanagementprofilesrc --group AC --group SuspendSession --key suspendType "1"
+}
+
+visual(){
+	numlock
+	layouts
+	locale_tweak
+	wallpaper
+	clock_tweak
+	kicker
+	showdesktop_tweak
+	panel_reorder_tweak
+	gtk_theme_tweak
+	sddm_tweaks
+	splash
+	screensaving_tweaks
+	lock_bg
+	cursor_tweak
+	konsole_tweaks
+	preview_delay_tweak
+	user_avatar_tweak
+	shell_prompt_format
+}
+
+rar_unrar(){
+	succ_echo "installing rar..."
+	wget $RAR_GZ
+	RAR_B=$(basename $RAR_GZ)
+	tar -zxf $RAR_B
+	rm $RAR_B
+	
+	cd rar
+	sudo make install
+	cd ..
+	rm -rf rar
+}
+
+# https://github.com/autokey/autokey
+autokey(){
+	succ_echo "Installing autokey..."
+	pip3 install autokey pyqt5 qscintilla
+	sudo dnf install wmctrl -y
+}
+
+ghidra(){
+	succ_echo "installing ghidra..."
+	wget $GHIDRA_ZIP
+	GHIDRA_BASENAME=$(basename $GHIDRA_ZIP)
+	unzip $GHIDRA_BASENAME >/dev/null
+	rm $GHIDRA_BASENAME
+	LEN=$(expr length $GHIDRA_BASENAME)
+	NEWLEN=$(expr $LEN - 13)
+	GHIDRA_BASENAME=$(expr substr $GHIDRA_BASENAME 1 $NEWLEN)
+	mv $GHIDRA_BASENAME ~/Apps/
+	export GHIDRA_PATH=$HOME/Apps/$GHIDRA_BASENAME
+	cat $GHIDRA_TEMPL | envsubst > ~/.local/share/applications/$(basename $GHIDRA_TEMPL)
+}
+
+# https://github.com/bobafetthotmail/refind-theme-regular
+# unfinished, needs uefi
+# isn't called anywhere
+refind(){
+	succ_echo "installing refind..."
+	wget $REFIND_RPM
+	REFIND_BASE=$(basename $REFIND_RPM)
+	sudo rpm -Uvh $REFIND_BASE
+}
+
+umlet(){
+	succ_echo "installing umlet..."
+	wget $UMLET_ZIP
+	
+	UMLET_BASE=$(basename $UMLET_ZIP)
+	unzip $UMLET_BASE >/dev/null
+	rm $UMLET_BASE
+	UMLET_DIR=$(ls | grep -i umlet)
+	mv $UMLET_DIR ~/Apps/
+	
+	JAVA_DIR=/usr/lib/jvm/java-11-openjdk
+	JE=$(echo $HOME/Apps/Umlet/umlet.sh | sed 's|/|\\/|g')
+	sed -i "s/^Exec=.*/Exec=$JE/g" $HOME/Apps/$UMLET_DIR/umlet.desktop
+	
+	cp ~/Apps/$UMLET_DIR/umlet.desktop ~/.local/share/applications/
+	chmod +x ~/Apps/$UMLET_DIR/umlet.sh
+	sed -i "/^_UMLET_HOME=.*/i export JAVA_HOME=$JAVA_DIR" $HOME/Apps/Umlet/umlet.sh
+}
+
+windscribe(){
+	succ_echo "installing windscribe..."
+	wget $WINDSCRIBE_RPM
+	WIND_NM=$(basename $WINDSCRIBE_RPM)
+	sudo rpm -i $WIND_NM
+	rm $WIND_NM
+}
+
+# stuff that is more than just 'dnf install'
+app_packages(){
+	mkdir -p ~/Apps
+	rar_unrar
+	autokey
+	ghidra
+	umlet
+	windscribe
+}
+
+brief_launch(){
+	BRIEF_SLEEP=10
+	$@ &
+	BRIEF_PID=$!
+	sleep ${BRIEF_SLEEP}s
+	kill $BRIEF_PID > /dev/null
+	sleep ${BRIEF_SLEEP}s
+}
+
+# might be unfinished
+file_associations_tweak(){
+	while ! ls ~/.local/share/applications/ | grep Telegram &>/dev/null; do
+		succ_echo "telegram didn't yet generate file associations, launching it..."
+		brief_launch telegram-desktop --
+	done
+	succ_echo "replacing mimeapps..."
+	TG_HANDL=$(kreadconfig5 --file mimeapps.list --group "Default Applications" --key "x-scheme-handler/tg")
+	cp $DEFAULT_APPS ~/.config/
+	kwriteconfig5 --file mimeapps.list --group "Added Associations" --key "x-scheme-handler/tg" "${TG_HANDL};"
+	kwriteconfig5 --file mimeapps.list --group "Default Applications" --key "x-scheme-handler/tg" "$TG_HANDL"
+	# xdg-settings set default-web-browser google-chrome.desktop
+	succ_echo "updating system cache..."
+	kbuildsycoca5
+}
+
+icontasks_tweak(){
+	succ_echo "changing pinned apps in taskbar..."
+	qdbus org.kde.plasmashell /PlasmaShell evaluateScript "$(<icontasks-script.js)"
+}
+
+postinstall_cleanup(){
+	succ_echo "unlinking kate from favourites..."
+	qdbus org.kde.ActivityManager /ActivityManager/Resources/Linking UnlinkResourceFromActivity \
+		"org.kde.plasma.favorites.applications" "org.kde.kate.desktop" ":any"
+	succ_echo "removing gambas3 desktop file..."
+	sudo rm -f /usr/share/applications/gambas3.desktop
+}
+
+doublecmd_confs(){
+	succ_echo 'changing doublecmd configs...'
+	DCMD_CONF=$HOME/.config/doublecmd/doublecmd.xml
+	while ! ls $DCMD_CONF &>/dev/null; do
+		succ_echo "doublecmd didn't yet generate config file, launching it..."
+		brief_launch doublecmd
+	done
+	xmlstarlet ed --inplace \
+		-u '/doublecmd/Behaviours/ShowSystemFiles' -v 'True' \
+		-u '/doublecmd/Behaviours/JustRunTerminal' -v 'konsole' $DCMD_CONF
+}
+
+windscribe_confs(){
+	succ_echo "disabling windscribe launch on startup..."
+	WIND_CONF=$HOME/.config/Windscribe/Windscribe2.conf
+	while ! ls $WIND_CONF &>/dev/null; do
+		succ_echo "windscibe didn't yet generate config file, launching it..."
+		brief_launch /usr/local/windscribe/Windscribe
+	done
+	sed -i "s/guiSettings=@ByteArray(\\\b\\\x1)/guiSettings=@ByteArray(\\\b\\\x0)/g" $WIND_CONF
+	sed -i "s/guiSettings=@ByteArray()/guiSettings=@ByteArray(\\\b\\\x0)/g" $WIND_CONF
+	rm -f $HOME/.config/autostart/windscribe.desktop
+}
+
+chrome_confs(){
+	succ_echo "installing chrome extensions..."
+	sudo ./install-chrome-ext "ajopnjidmegmdimjlfnijceegpefgped" "BetterTTV"
+	sudo ./install-chrome-ext "fadndhdgpmmaapbmfcknlfgcflmmmieb" "FrankerFaceZ"
+	sudo ./install-chrome-ext "imfeikbeimbfpmgfkkmjekabdehiiajc" "Group Speed Dial"
+	sudo ./install-chrome-ext "gebbhagfogifgggkldgodflihgfeippi" "Return YouTube Dislike"
+	sudo ./install-chrome-ext "hhienkkjhkcdeaolmcniloflgpjhdefi" "Redditsave"
+	sudo ./install-chrome-ext "cjpalhdlnbpafiamejdnhcphjbkeiagm" "uBlock Origin"
+}
+
+# https://vscodium.com/#install
+codium_confs(){
+	succ_echo "installing vs-codium extensions..."
+	codium --install-extension ms-vscode.hexeditor
+	codium --install-extension llvm-vs-code-extensions.vscode-clangd
+	codium --install-extension ms-python.python
+}
+
+# also handles stuff that depends on certain things being installed
+main_configs(){
+	file_associations_tweak
+	icontasks_tweak
+	postinstall_cleanup
+	doublecmd_confs
+	windscribe_confs
+	chrome_confs
+	codium_confs
+	
+	succ_echo "adding user to wireshark group..."
+	sudo usermod -aG wireshark $USER
+}
+
+succ_echo(){
+	BoldBlackFont='\033[1;30m'
+	IntenseGreenBackground='\033[0;102m'
+	TextReset='\033[0m'
+	echo -en "${IntenseGreenBackground}"
+	echo -en "${BoldBlackFont}"
+	echo -n $@
+	echo -e "${TextReset}"
+}
+
+clean_sudo_persist(){
+	succ_echo "cleaning up sudo persist process..."
+	kill $SUDO_PERSIST_PID
+}
+
+############################################################
+############################################################
+
+source ./commons
+#wallpaper
+export WALLP_BASE=$(basename $WALLP)
+export WALLP_TARG="/usr/share/backgrounds/$WALLP_BASE"
+# quoted
+export WALLPQ_TARG="'$HOME/Pictures/wallpapers/$WALLP_BASE'"
+# escaped
+export WALLPE_TARG=$(echo $WALLP_TARG | sed 's|/|\\/|g')
+# lock screen
+export LOCKS_BASE=$(basename $LOCKS)
+export LOCKS_TARG="/usr/share/backgrounds/$LOCKS_BASE"
+export LOCKSE_TARG=$(echo $LOCKS_TARG | sed 's|/|\\/|g')
+
+# optional: playonlinux winetricks wine lutris
+# https://github.com/RMPR/atbswp
+# eclipse-java
+export DNF_PACKAGES=\
+"inotify-tools xmlstarlet xterm tmux lynx \
+toilet cmatrix sl vim-common \
+google-chrome-stable firefox steam gimp krita \
+vlc elisa-player obs-studio kate neofetch git \
+java-11-openjdk-devel doublecmd-qt tor \
+python3-tools ddd graphviz filelight discord \
+telegram-desktop python3-pip torbrowser-launcher \
+qtcreator fish inxi i-nex sqlitebrowser wireshark \
+codium okteta"
+
+source ./packages
+
+echo "This script is meant for Fedora Workstation 36 KDE spin, using on any other system may result in config corruption."
+
+if [ $# -le 0 ]; then
+	echo "Available options: --all, --visual, --repos, --packages"
+	echo ""
+	echo "--packages-main, --packages-app"
+	echo ""
+	echo "	--visual-containments, --visual-keyboard,"
+	echo "	--visual-screen, --visual-apps"
+else
+	# https://unix.stackexchange.com/questions/625645/how-to-make-sudo-not-expire-while-script-is-running
+	sudo -v
+	succ_echo "creating sudo persist process..."
+	while sleep 60; do sudo -v; done &
+	export SUDO_PERSIST_PID=$!
+	
+	# https://stackoverflow.com/questions/64786/error-handling-in-bash
+	trap clean_sudo_persist ERR
+	
+	set -e
+
+	EXEC_FL=0
+	for i in "$@"; do
+	  case $i in
+		--all)
+		  sudo dnf update -y
+		  repos
+		  main_packages
+		  app_packages
+		  main_configs
+		  visual
+		  succ_echo "a reboot is required for some changes to take effect..."
+		  ;;
+		--visual)
+		  visual
+		  ;;
+		--visual-containments)
+		  wallpaper
+		  kicker
+		  showdesktop_tweak
+		  panel_reorder_tweak
+		  clock_tweak
+		  ;;
+		--visual-keyboard)
+		  numlock
+		  layouts
+		  ;;
+		--visual-screen)
+		  sddm_tweaks
+		  splash
+		  screensaving_tweaks
+		  lock_bg
+		  gtk_theme_tweak
+		  user_avatar_tweak
+		  shell_prompt_format
+		  ;;
+		--visual-apps)
+		  konsole_tweaks
+		  ;;
+		--repos)
+		  repos
+		  ;;
+		--packages)
+		  main_packages
+		  app_packages
+		  ;;
+		--packages-main)
+		  main_packages
+		  ;;
+		----packages-app)
+		  app_packages
+		  ;;
+		--func)
+		  EXEC_FL=1
+		  ;;
+		*)
+		  if [ $EXEC_FL -eq 1 ]; then
+			EXEC_FL=0
+			$i
+		  else
+			echo "Unknown option $i"
+		  fi
+		  ;;
+	  esac
+	done
+
+	clean_sudo_persist
+fi
+
+# https://fedoramagazine.org/things-to-do-after-installing-fedora-34-workstation/
+# https://askubuntu.com/questions/597395/how-to-set-custom-keyboard-shortcuts-from-terminal
+# https://askubuntu.com/questions/689884/where-is-settings-information-stored
+
+# https://www.how2shout.com/linux/how-to-install-qemu-kvm-and-virt-manager-gui-on-ubuntu-20-04-lts/
+
+# containments numbers are unreliable
+# https://develop.kde.org/docs/extend/plasma/scripting/api/
+# https://www.opennet.ru/man.shtml?topic=kicker&category=1&russian=2
+# https://github.com/KDE/kde-cli-tools
+# https://userbase.kde.org/KDE_Connect/Tutorials/Useful_commands
+# plasma-interactiveconsole
+# cat file | xargs qdbus org.kde.plasmashell /PlasmaShell evaluateScript
+
+# https://forums.opensuse.org/showthread.php/540033-SOLVED-Changing-time-and-date-format-on-sddm-login-lock-screen
+# https://manpages.ubuntu.com/manpages/bionic/man5/sddm.conf.5.html
+
+# https://anadoxin.org/blog/removing-unwanted-konsole-toolbar/
+# dnf check all files installed by package
+# https://github.com/KDE/konsole/tree/8663b4be86fbdd45583dcbc373c4b989bd8e819d/desktop
+
+# https://forum.qt.io/topic/132729/how-to-add-a-kit-to-qt-creator-from-the-command-line-or-other-programmatic-manner/7
+# https://doc.qt.io/qtinstallerframework/ifw-use-cases-cli.html
+
+# https://www.reddit.com/r/kde/comments/uvtcgw/changing_size_of_taskonly_manager_thumbnail/
+# https://github.com/shalva97/kde-configuration-files
+
+# https://www.addictivetips.com/ubuntu-linux-tips/hardinfo-linux-hardware-information/#:~:text=If%20you%20want%20to%20get,only%20works%20for%20Fedora%2032.
+

@@ -1,0 +1,14 @@
+[Desktop Entry]
+Comment=
+Exec=$GHIDRA_PATH/ghidraRun
+Icon=$GHIDRA_PATH/docs/GhidraClass/Intermediate/Images/GhidraLogo64.png
+Name=Ghidra
+NoDisplay=false
+Path=
+Categories=Development
+StartupNotify=true
+Terminal=false
+TerminalOptions=
+Type=Application
+X-KDE-SubstituteUID=false
+X-KDE-Username=

@@ -1,0 +1,8 @@
+#!/bin/bash
+# the rest of the packages
+export GHIDRA_ZIP="https://github.com/NationalSecurityAgency/ghidra/releases/download/Ghidra_10.1.5_build/ghidra_10.1.5_PUBLIC_20220726.zip"
+export WINDSCRIBE_RPM="https://github.com/Windscribe/Desktop-App/releases/download/v2.4.11/windscribe_2.4.11_x86_64.rpm"
+export UMLET_ZIP="https://www.umlet.com/download/umlet_15_0/umlet-standalone-15.0.0.zip"
+# http://sourceforge.net/projects/refind/files/0.13.3.1/refind-0.13.3.1-1.x86_64.rpm/download
+export REFIND_RPM="https://altushost-swe.dl.sourceforge.net/project/refind/0.13.3.1/refind-0.13.3.1-1.x86_64.rpm"
+export RAR_GZ="https://www.rarlab.com/rar/rarlinux-x64-612.tar.gz"
