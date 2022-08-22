@@ -339,8 +339,11 @@ umlet(){
 	mv $UMLET_DIR ~/Apps/
 	
 	JAVA_DIR=/usr/lib/jvm/java-11-openjdk
-	JE=$(echo $HOME/Apps/Umlet/umlet.sh | sed 's|/|\\/|g')
-	sed -i "s/^Exec=.*/Exec=$JE/g" $HOME/Apps/$UMLET_DIR/umlet.desktop
+	EXECP=$(echo $HOME/Apps/Umlet/umlet.sh | sed 's|/|\\/|g')
+	sed -i "s/^Exec=.*/Exec=$EXECP/g" $HOME/Apps/$UMLET_DIR/umlet.desktop
+	
+	IMGP=$(echo $HOME/Apps/Umlet/img/umlet_logo.png | sed 's|/|\\/|g')
+	sed -i "s/^Icon=.*/Icon=$IMGP/g" $HOME/Apps/$UMLET_DIR/umlet.desktop
 	
 	cp ~/Apps/$UMLET_DIR/umlet.desktop ~/.local/share/applications/
 	chmod +x ~/Apps/$UMLET_DIR/umlet.sh
