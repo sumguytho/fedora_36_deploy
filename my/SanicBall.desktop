@@ -1,0 +1,14 @@
+[Desktop Entry]
+Comment=
+Exec=$SANIC_EXEC
+Icon=$SANIC_ICON
+Name=Sanic Ball
+NoDisplay=false
+Path=
+Categories=Game
+StartupNotify=true
+Terminal=false
+TerminalOptions=
+Type=Application
+X-KDE-SubstituteUID=false
+X-KDE-Username=

@@ -20,3 +20,4 @@ export SPLASH_THEME="common/BeautifulTreeAnimation.tar.gz"
 export GHIDRA_TEMPL="my/Ghidra.desktop"
 # a mimeapps.list config file
 export DEFAULT_APPS="my/mimeapps.list"
+export SANIC_TEMPL="my/SanicBall.desktop"

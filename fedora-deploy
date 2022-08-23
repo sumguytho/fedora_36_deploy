@@ -1,40 +1,5 @@
 #!/bin/bash
-# Fedora Workstation 36
 
-# can't figure out:
-#	change session type to x11 from wayland in sddm using command line
-#	check whether grub / refind theme installs fine, somehow
-#	idk if it's possible to change chrome extension settings using cli
-
-#	can't make system reconfigure after changing defaults, dbus-send doesn't work
-#	dbus-monitor says
-#	dbus-send --system --dest=org.kde.launcher5 /KLauncher org.kde.KLauncher.reparseConfiguration
-#	https://www.ghacks.net/2018/03/28/how-to-set-default-program-file-associations-in-kde5-plasma/
-#	kbuildsycoca5 rebuilds system configuration
-
-#	qt creator
-#	last version that allows installation without account is
-#	https://download.qt.io/official_releases/qt/5.12/5.12.10/
-#	qt cli installer
-#	https://github.com/miurahr/aqtinstall
-#	electronjs?
-
-#	couldn't figure out how to make preview show on click, settled for 250ms tooltip delay
-
-#	kactivitymanagerd-statsrc for menu favourites
-#	doesn't do anything, it's done using dbus
-
-#	hardinfo requires xorg-x11-utils from RPMUnited, i-nex seems to be fine
-
-# 	file-roller? VirtualBox or qemu?
-# 	maybe autohotkey on wine
-
-# 	right ctrl is just a virtualbox host key thing
-
-
-# TODO: add trash, computer to desktop
-# settings for steam and other apps
-# scrolling in terminal mode using scroll lock, check whether its possible to get a list of launcher favourites
 
 repos(){
 	succ_echo "installing RPM Fusion repositories..."
@@ -318,16 +283,6 @@ ghidra(){
 	cat $GHIDRA_TEMPL | envsubst > ~/.local/share/applications/$(basename $GHIDRA_TEMPL)
 }
 
-# https://github.com/bobafetthotmail/refind-theme-regular
-# unfinished, needs uefi
-# isn't called anywhere
-refind(){
-	succ_echo "installing refind..."
-	wget $REFIND_RPM
-	REFIND_BASE=$(basename $REFIND_RPM)
-	sudo rpm -Uvh $REFIND_BASE
-}
-
 umlet(){
 	succ_echo "installing umlet..."
 	wget $UMLET_ZIP
@@ -358,6 +313,20 @@ windscribe(){
 	rm $WIND_NM
 }
 
+sanic_ball(){
+	succ_echo 'installing sanic ball???'
+	wget $SANIC_BALL_ZIP
+	SANIC_BASE=$(basename $SANIC_BALL_ZIP)
+	mkdir ~/Apps/SanicBall
+	unzip -d ~/Apps/SanicBall $SANIC_BASE >/dev/null
+	rm $SANIC_BASE
+	
+	export SANIC_ICON=$HOME/Apps/SanicBall/Sanicball_v0.8.2_Data/Resources/UnityPlayer.png
+	export SANIC_EXEC=$HOME/Apps/SanicBall/Sanicball_v0.8.2.x86_64
+	chmod +x $SANIC_EXEC
+	cat $SANIC_TEMPL | envsubst > ~/.local/share/applications/$(basename $SANIC_TEMPL)
+}
+
 # stuff that is more than just 'dnf install'
 app_packages(){
 	mkdir -p ~/Apps
@@ -366,6 +335,7 @@ app_packages(){
 	ghidra
 	umlet
 	windscribe
+	sanic_ball
 }
 
 brief_launch(){
@@ -493,9 +463,7 @@ export LOCKS_BASE=$(basename $LOCKS)
 export LOCKS_TARG="/usr/share/backgrounds/$LOCKS_BASE"
 export LOCKSE_TARG=$(echo $LOCKS_TARG | sed 's|/|\\/|g')
 
-# optional: playonlinux winetricks wine lutris
-# https://github.com/RMPR/atbswp
-# eclipse-java
+
 export DNF_PACKAGES=\
 "inotify-tools xmlstarlet xterm tmux lynx \
 toilet cmatrix sl vim-common \
@@ -597,33 +565,3 @@ else
 
 	clean_sudo_persist
 fi
-
-# https://fedoramagazine.org/things-to-do-after-installing-fedora-34-workstation/
-# https://askubuntu.com/questions/597395/how-to-set-custom-keyboard-shortcuts-from-terminal
-# https://askubuntu.com/questions/689884/where-is-settings-information-stored
-
-# https://www.how2shout.com/linux/how-to-install-qemu-kvm-and-virt-manager-gui-on-ubuntu-20-04-lts/
-
-# containments numbers are unreliable
-# https://develop.kde.org/docs/extend/plasma/scripting/api/
-# https://www.opennet.ru/man.shtml?topic=kicker&category=1&russian=2
-# https://github.com/KDE/kde-cli-tools
-# https://userbase.kde.org/KDE_Connect/Tutorials/Useful_commands
-# plasma-interactiveconsole
-# cat file | xargs qdbus org.kde.plasmashell /PlasmaShell evaluateScript
-
-# https://forums.opensuse.org/showthread.php/540033-SOLVED-Changing-time-and-date-format-on-sddm-login-lock-screen
-# https://manpages.ubuntu.com/manpages/bionic/man5/sddm.conf.5.html
-
-# https://anadoxin.org/blog/removing-unwanted-konsole-toolbar/
-# dnf check all files installed by package
-# https://github.com/KDE/konsole/tree/8663b4be86fbdd45583dcbc373c4b989bd8e819d/desktop
-
-# https://forum.qt.io/topic/132729/how-to-add-a-kit-to-qt-creator-from-the-command-line-or-other-programmatic-manner/7
-# https://doc.qt.io/qtinstallerframework/ifw-use-cases-cli.html
-
-# https://www.reddit.com/r/kde/comments/uvtcgw/changing_size_of_taskonly_manager_thumbnail/
-# https://github.com/shalva97/kde-configuration-files
-
-# https://www.addictivetips.com/ubuntu-linux-tips/hardinfo-linux-hardware-information/#:~:text=If%20you%20want%20to%20get,only%20works%20for%20Fedora%2032.
-
