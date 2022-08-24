@@ -35,6 +35,8 @@ main_packages(){
 	python3 -m pip install --upgrade pip
 	succ_echo "installing virtualenv..."
 	pip3 install --user virtualenv
+	succ_echo "installing tmuxinator ruby gem..."
+	gem install tmuxinator
 }
 
 layouts(){
@@ -313,18 +315,32 @@ windscribe(){
 	rm $WIND_NM
 }
 
+# something something, 60% of the time
 sanic_ball(){
 	succ_echo 'installing sanic ball???'
 	wget $SANIC_BALL_ZIP
 	SANIC_BASE=$(basename $SANIC_BALL_ZIP)
 	mkdir ~/Apps/SanicBall
-	unzip -d ~/Apps/SanicBall $SANIC_BASE >/dev/null
+	unzip -d ~/Apps/SanicBall/ $SANIC_BASE >/dev/null
 	rm $SANIC_BASE
 	
 	export SANIC_ICON=$HOME/Apps/SanicBall/Sanicball_v0.8.2_Data/Resources/UnityPlayer.png
 	export SANIC_EXEC=$HOME/Apps/SanicBall/Sanicball_v0.8.2.x86_64
 	chmod +x $SANIC_EXEC
 	cat $SANIC_TEMPL | envsubst > ~/.local/share/applications/$(basename $SANIC_TEMPL)
+}
+
+eclipse_ide(){
+	succ_echo "installing eclipse..."
+	#wget $ECLIPSE_GZ
+	ECLIPSE_BASE=$(basename $ECLIPSE_GZ)
+	tar -zxf $ECLIPSE_BASE -C ~/Apps/
+	mv ~/Apps/eclipse ~/Apps/EclipseJava
+	
+	export ECLIPSE_EXEC=$HOME/Apps/EclipseJava/eclipse
+	export ECLIPSE_ICON=$HOME/Apps/EclipseJava/icon.xpm
+	chmod +x $ECLIPSE_EXEC
+	cat $ECLIPSE_TEMPL | envsubst > ~/.local/share/applications/$(basename $ECLIPSE_TEMPL)
 }
 
 # stuff that is more than just 'dnf install'
@@ -335,7 +351,8 @@ app_packages(){
 	ghidra
 	umlet
 	windscribe
-	sanic_ball
+	# sanic_ball
+	eclipse_ide
 }
 
 brief_launch(){
@@ -385,6 +402,7 @@ doublecmd_confs(){
 	done
 	xmlstarlet ed --inplace \
 		-u '/doublecmd/Behaviours/ShowSystemFiles' -v 'True' \
+		-u '/doublecmd/Behaviours/DateTimeFormat' -v 'dd/mm/yyyy hh:nn:ss' \
 		-u '/doublecmd/Behaviours/JustRunTerminal' -v 'konsole' $DCMD_CONF
 }
 
@@ -473,14 +491,14 @@ java-11-openjdk-devel doublecmd-qt tor \
 python3-tools ddd graphviz filelight discord \
 telegram-desktop python3-pip torbrowser-launcher \
 qtcreator fish inxi i-nex sqlitebrowser wireshark \
-codium okteta"
+codium okteta rubygems"
 
 source ./packages
 
 echo "This script is meant for Fedora Workstation 36 KDE spin, using on any other system may result in config corruption."
 
 if [ $# -le 0 ]; then
-	echo "Available options: --all, --visual, --repos, --packages"
+	echo "Available options: --all, --all-packages, --visual, --repos, --packages"
 	echo ""
 	echo "--packages-main, --packages-app"
 	echo ""
@@ -509,6 +527,12 @@ else
 		  main_configs
 		  visual
 		  succ_echo "a reboot is required for some changes to take effect..."
+		  ;;
+		--all-packages)
+		  sudo dnf update -y
+		  repos
+		  main_packages
+		  app_packages
 		  ;;
 		--visual)
 		  visual

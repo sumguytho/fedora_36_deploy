@@ -1,0 +1,14 @@
+[Desktop Entry]
+Comment=
+Exec=$ECLIPSE_EXEC
+Icon=$ECLIPSE_ICON
+Name=Eclipse JDT
+NoDisplay=false
+Path=
+Categories=Development
+StartupNotify=true
+Terminal=false
+TerminalOptions=
+Type=Application
+X-KDE-SubstituteUID=false
+X-KDE-Username=

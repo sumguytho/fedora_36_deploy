@@ -21,3 +21,4 @@ export GHIDRA_TEMPL="my/Ghidra.desktop"
 # a mimeapps.list config file
 export DEFAULT_APPS="my/mimeapps.list"
 export SANIC_TEMPL="my/SanicBall.desktop"
+export ECLIPSE_TEMPL="my/Eclipse.desktop"
