@@ -120,7 +120,7 @@ sddm_tweaks(){
 
 lock_bg(){
 	succ_echo "changing lock screen background..."
-	kwriteconfig5 --file kscreenlockerrc --group Greeter --group Wallpaper --group org.kde.image --group General --key Image "$LOCKS"
+	kwriteconfig5 --file kscreenlockerrc --group Greeter --group Wallpaper --group org.kde.image --group General --key Image "$LOCKS_TARG"
 }
 
 konsole_theme(){
@@ -267,7 +267,7 @@ rar_unrar(){
 # https://github.com/autokey/autokey
 autokey(){
 	succ_echo "Installing autokey..."
-	pip3 install autokey pyqt5 qscintilla
+	pip3 install autokey qscintilla pyqt5
 	sudo dnf install wmctrl -y
 }
 
@@ -309,10 +309,7 @@ umlet(){
 
 windscribe(){
 	succ_echo "installing windscribe..."
-	wget $WINDSCRIBE_RPM
-	WIND_NM=$(basename $WINDSCRIBE_RPM)
-	sudo rpm -i $WIND_NM
-	rm $WIND_NM
+	sudo rpm -i $WINDSCRIBE_RPM
 }
 
 # something something, 60% of the time
@@ -374,7 +371,7 @@ file_associations_tweak(){
 	TG_HANDL=$(kreadconfig5 --file mimeapps.list --group "Default Applications" --key "x-scheme-handler/tg")
 	cp $DEFAULT_APPS ~/.config/
 	kwriteconfig5 --file mimeapps.list --group "Added Associations" --key "x-scheme-handler/tg" "${TG_HANDL};"
-	kwriteconfig5 --file mimeapps.list --group "Default Applications" --key "x-scheme-handler/tg" "$TG_HANDL"
+	kwriteconfig5 --file mimeapps.list --group "Default Applications" --key "x-scheme-handler/tg" "${TG_HANDL}"
 	# xdg-settings set default-web-browser google-chrome.desktop
 	succ_echo "updating system cache..."
 	kbuildsycoca5
@@ -391,6 +388,8 @@ postinstall_cleanup(){
 		"org.kde.plasma.favorites.applications" "org.kde.kate.desktop" ":any"
 	succ_echo "removing gambas3 desktop file..."
 	sudo rm -f /usr/share/applications/gambas3.desktop
+	succ_echo "removing autokey-gtk desktop file..."
+	sudo rm -f ~/.local/share/applications/autokey-gtk.desktop
 }
 
 doublecmd_confs(){
