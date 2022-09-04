@@ -67,7 +67,7 @@ wallpaper(){
 }
 
 kicker(){
-	succ_echo "replacing kickoff wiget with kicker..."
+	succ_echo "replacing kickoff widget with kicker..."
 	qdbus org.kde.plasmashell /PlasmaShell evaluateScript "$(<kicker-script.js)"
 	
 	UNNECESSARY_ARR=(\
@@ -267,7 +267,8 @@ rar_unrar(){
 # https://github.com/autokey/autokey
 autokey(){
 	succ_echo "Installing autokey..."
-	pip3 install autokey qscintilla pyqt5
+	pip3 install autokey
+	pip3 install qscintilla pyqt5
 	sudo dnf install wmctrl -y
 }
 
@@ -321,6 +322,7 @@ sanic_ball(){
 	unzip -d ~/Apps/SanicBall/ $SANIC_BASE >/dev/null
 	rm $SANIC_BASE
 	
+	# TODO: substitude Sanicball_v0.8.2_Data with ls
 	export SANIC_ICON=$HOME/Apps/SanicBall/Sanicball_v0.8.2_Data/Resources/UnityPlayer.png
 	export SANIC_EXEC=$HOME/Apps/SanicBall/Sanicball_v0.8.2.x86_64
 	chmod +x $SANIC_EXEC
@@ -403,6 +405,29 @@ doublecmd_confs(){
 		-u '/doublecmd/Behaviours/ShowSystemFiles' -v 'True' \
 		-u '/doublecmd/Behaviours/DateTimeFormat' -v 'dd/mm/yyyy hh:nn:ss' \
 		-u '/doublecmd/Behaviours/JustRunTerminal' -v 'konsole' $DCMD_CONF
+		
+	SUBNODE="/doublecmd/Hotkeys/Form[@Name='Main']"
+	DCMD_SCF=$HOME/.config/doublecmd/shortcuts.scf
+	
+	# https://stackoverflow.com/questions/11618715/xmlstarlet-to-insert-tags
+	# https://stackoverflow.com/questions/5954168/how-to-insert-a-new-element-under-another-with-xmlstarlet
+	xmlstarlet ed -L -s $SUBNODE -t elem -n HotkeyTMP -v "" \
+		-s //HotkeyTMP -t elem -n 'Shortcut' -v 'Ctrl+Shift+1' \
+		-s //HotkeyTMP -t elem -n 'Command' -v 'cm_PanelsSplitterPerPos' \
+		-s //HotkeyTMP -t elem -n 'Param' -v 'splitpct=100' \
+		-r //HotkeyTMP -v Hotkey $DCMD_SCF
+		
+	xmlstarlet ed -L -s $SUBNODE -t elem -n HotkeyTMP -v "" \
+		-s //HotkeyTMP -t elem -n 'Shortcut' -v 'Ctrl+Shift+2' \
+		-s //HotkeyTMP -t elem -n 'Command' -v 'cm_PanelsSplitterPerPos' \
+		-s //HotkeyTMP -t elem -n 'Param' -v 'splitpct=50' \
+		-r //HotkeyTMP -v Hotkey $DCMD_SCF
+		
+	xmlstarlet ed -L -s $SUBNODE -t elem -n HotkeyTMP -v "" \
+		-s //HotkeyTMP -t elem -n 'Shortcut' -v 'Ctrl+Shift+3' \
+		-s //HotkeyTMP -t elem -n 'Command' -v 'cm_PanelsSplitterPerPos' \
+		-s //HotkeyTMP -t elem -n 'Param' -v 'splitpct=0' \
+		-r //HotkeyTMP -v Hotkey $DCMD_SCF
 }
 
 windscribe_confs(){
@@ -435,12 +460,38 @@ codium_confs(){
 	codium --install-extension ms-python.python
 }
 
+desktop_icons() {
+	# doublecmd doesn't have trash link, nor is it possible
+	# to add said link with little effort
+	succ_echo "populating desktop with links..."
+	cp -n $TRASH_DESKTOP ~/Desktop/
+	rm -f ~/Desktop/{$USER,root}
+	ln -s $HOME ~/Desktop/$USER
+	ln -s / ~/Desktop/root
+	ATTEMPTS=5
+	DESKTOP_ID=$(qdbus org.kde.plasmashell /PlasmaShell evaluateScript "print(desktops()[0].id)")
+	while [ $ATTEMPTS -gt 0 ]; do
+		qdbus org.kde.plasmashell /PlasmaShell evaluateScript "$(cat deskpos-script.js)"
+		# the config isn't adjusted fast enough after creating links
+		# after it ajdusts it can overwrite changes made by plasma script
+		sleep 2
+		
+		POSITIONS=$(kreadconfig5 --file plasma-org.kde.plasma.desktop-appletsrc --group Containments --group "$DESKTOP_ID" --group General --key positions)
+		POSITIONS=$(echo "'$POSITIONS'" | tr -d "\"\\\\")
+		if echo "$POSITIONS" | grep -q "trash\.desktop,0,0"; then
+			break
+		fi
+		((ATTEMPTS--))
+	done
+}
+
 # also handles stuff that depends on certain things being installed
 main_configs(){
 	file_associations_tweak
 	icontasks_tweak
 	postinstall_cleanup
 	doublecmd_confs
+	desktop_icons
 	windscribe_confs
 	chrome_confs
 	codium_confs
@@ -485,12 +536,12 @@ export DNF_PACKAGES=\
 "inotify-tools xmlstarlet xterm tmux lynx \
 toilet cmatrix sl vim-common \
 google-chrome-stable firefox steam gimp krita \
-vlc elisa-player obs-studio kate neofetch git \
+vlc elisa-player obs-studio kate neofetch\
 java-11-openjdk-devel doublecmd-qt tor \
 python3-tools ddd graphviz filelight discord \
 telegram-desktop python3-pip torbrowser-launcher \
 qtcreator fish inxi i-nex sqlitebrowser wireshark \
-codium okteta rubygems"
+codium okteta rubygems strace"
 
 source ./packages
 
@@ -514,8 +565,23 @@ else
 	trap clean_sudo_persist ERR
 	
 	set -e
-
 	EXEC_FL=0
+	
+	if ! command -v git >/dev/null 2>&1; then
+		succ_echo "git isn't installed, installing it..."
+		sudo dnf install git -y
+	fi
+	if [ -z $COMMON_GIT_DIR ]; then
+		GIT_BASE=$(basename $COMMON_GIT)
+		GIT_BASE=${GIT_BASE%.*}
+		export COMMON_GIT_DIR=$GIT_BASE
+		succ_echo "no git clone dir provided, assuming '${GIT_BASE}'..."
+	fi
+	if [ ! -d $COMMON_GIT_DIR ]; then
+		succ_echo "directory '$COMMON_GIT_DIR' doesn't exist, cloning it..."
+		git clone $COMMON_GIT $COMMON_GIT_DIR
+	fi
+	
 	for i in "$@"; do
 	  case $i in
 		--all)
@@ -523,6 +589,9 @@ else
 		  repos
 		  main_packages
 		  app_packages
+		  # https://stackoverflow.com/questions/2720014/how-to-upgrade-all-python-packages-with-pip
+		  succ_echo "updating pip packages..."
+		  pip list --outdated --format=freeze | grep -v '^\-e' | cut -d = -f 1  | xargs -n1 pip install -U
 		  main_configs
 		  visual
 		  succ_echo "a reboot is required for some changes to take effect..."

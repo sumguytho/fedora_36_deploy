@@ -1,7 +1,8 @@
 #!/bin/bash
 
 # a repo with files used below
-export COMMON_GIT=""
+export COMMON_GIT="https://github.com/sumguytho/fedora_36_common.git"
+export COMMON_GIT_DIR="common"
 export PROFILE_PIC="common/tierm.jpg"
 # wallpaper
 export WALLP="common/XT39323.jpg"
@@ -22,3 +23,4 @@ export GHIDRA_TEMPL="my/Ghidra.desktop"
 export DEFAULT_APPS="my/mimeapps.list"
 export SANIC_TEMPL="my/SanicBall.desktop"
 export ECLIPSE_TEMPL="my/Eclipse.desktop"
+export TRASH_DESKTOP="my/trash.desktop"
