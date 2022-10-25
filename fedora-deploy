@@ -9,8 +9,6 @@ repos(){
 	  https://download1.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-$(rpm -E %fedora).noarch.rpm -y
 	succ_echo "installing third-party repositories..."
 	sudo dnf install fedora-workstation-repositories -y
-	succ_echo "enabling google chrome repository..."
-	sudo dnf config-manager --set-enabled google-chrome
 	succ_echo "adding double commander repository..."
 	sudo dnf config-manager --add-repo https://download.opensuse.org/repositories/home:Alexx2000/Fedora_36/home:Alexx2000.repo
 	succ_echo "adding tor repository..."
@@ -178,8 +176,6 @@ panel_reorder_tweak(){
 # https://fedoraproject.org/wiki/GRUB_2
 # https://store.kde.org/p/1757215 ## old theme is https://store.kde.org/p/1000140
 # https://www.reddit.com/r/Fedora/comments/swhqsi/grub_customization_issue/
-# finished, no idea whether this is gonna work
-# hence it's not called anywhere
 grub_theme(){
 	succ_echo 'installing grub theme...'
 	sudo tar -xf $GRUB_THEME -C $HOME
@@ -249,6 +245,7 @@ visual(){
 	preview_delay_tweak
 	user_avatar_tweak
 	shell_prompt_format
+	grub_theme
 }
 
 rar_unrar(){
@@ -281,6 +278,7 @@ ghidra(){
 	LEN=$(expr length $GHIDRA_BASENAME)
 	NEWLEN=$(expr $LEN - 13)
 	GHIDRA_BASENAME=$(expr substr $GHIDRA_BASENAME 1 $NEWLEN)
+	rm -rf ~/Apps/$GHIDRA_BASENAME
 	mv $GHIDRA_BASENAME ~/Apps/
 	export GHIDRA_PATH=$HOME/Apps/$GHIDRA_BASENAME
 	cat $GHIDRA_TEMPL | envsubst > ~/.local/share/applications/$(basename $GHIDRA_TEMPL)
@@ -294,6 +292,7 @@ umlet(){
 	unzip $UMLET_BASE >/dev/null
 	rm $UMLET_BASE
 	UMLET_DIR=$(ls | grep -i umlet)
+	rm -rf ~/Apps/$UMLET_DIR
 	mv $UMLET_DIR ~/Apps/
 	
 	JAVA_DIR=/usr/lib/jvm/java-11-openjdk
@@ -331,8 +330,9 @@ sanic_ball(){
 
 eclipse_ide(){
 	succ_echo "installing eclipse..."
-	#wget $ECLIPSE_GZ
+	wget $ECLIPSE_GZ
 	ECLIPSE_BASE=$(basename $ECLIPSE_GZ)
+	rm -rf ~/Apps/EclipseJava
 	tar -zxf $ECLIPSE_BASE -C ~/Apps/
 	mv ~/Apps/eclipse ~/Apps/EclipseJava
 	
@@ -442,16 +442,6 @@ windscribe_confs(){
 	rm -f $HOME/.config/autostart/windscribe.desktop
 }
 
-chrome_confs(){
-	succ_echo "installing chrome extensions..."
-	sudo ./install-chrome-ext "ajopnjidmegmdimjlfnijceegpefgped" "BetterTTV"
-	sudo ./install-chrome-ext "fadndhdgpmmaapbmfcknlfgcflmmmieb" "FrankerFaceZ"
-	sudo ./install-chrome-ext "imfeikbeimbfpmgfkkmjekabdehiiajc" "Group Speed Dial"
-	sudo ./install-chrome-ext "gebbhagfogifgggkldgodflihgfeippi" "Return YouTube Dislike"
-	sudo ./install-chrome-ext "hhienkkjhkcdeaolmcniloflgpjhdefi" "Redditsave"
-	sudo ./install-chrome-ext "cjpalhdlnbpafiamejdnhcphjbkeiagm" "uBlock Origin"
-}
-
 # https://vscodium.com/#install
 codium_confs(){
 	succ_echo "installing vs-codium extensions..."
@@ -485,6 +475,20 @@ desktop_icons() {
 	done
 }
 
+firefox_confs() {
+	succ_echo "applying firefox profile config..."
+	while [ ! -d ~/.mozilla/firefox/ ]; do
+		succ_echo "firefox didn't yet generate config files, launching it..."
+		brief_launch firefox
+	done
+	def_prof=`echo ~/.mozilla/firefox/*.default-release`
+	if [ ${#def_prof[@]} -ne 1 ]; then
+		succ_echo "more then one firefox profile found, skipping..."
+		return 0
+	fi
+	cp ./my/user.js $def_prof/
+}
+
 # also handles stuff that depends on certain things being installed
 main_configs(){
 	file_associations_tweak
@@ -493,8 +497,8 @@ main_configs(){
 	doublecmd_confs
 	desktop_icons
 	windscribe_confs
-	chrome_confs
 	codium_confs
+	firefox_confs
 	
 	succ_echo "adding user to wireshark group..."
 	sudo usermod -aG wireshark $USER
@@ -513,6 +517,11 @@ succ_echo(){
 clean_sudo_persist(){
 	succ_echo "cleaning up sudo persist process..."
 	kill $SUDO_PERSIST_PID
+}
+
+clean_sudo_persist_err(){
+	succ_echo "an error occurred..."
+	clean_sudo_persist
 }
 
 ############################################################
@@ -535,17 +544,17 @@ export LOCKSE_TARG=$(echo $LOCKS_TARG | sed 's|/|\\/|g')
 export DNF_PACKAGES=\
 "inotify-tools xmlstarlet xterm tmux lynx \
 toilet cmatrix sl vim-common \
-google-chrome-stable firefox steam gimp krita \
-vlc elisa-player obs-studio kate neofetch\
+firefox steam gimp krita \
+vlc elisa-player obs-studio kate neofetch \
 java-11-openjdk-devel doublecmd-qt tor \
 python3-tools ddd graphviz filelight discord \
 telegram-desktop python3-pip torbrowser-launcher \
 qtcreator fish inxi i-nex sqlitebrowser wireshark \
-codium okteta rubygems strace"
+codium okteta rubygems strace keepassxc"
 
 source ./packages
 
-echo "This script is meant for Fedora Workstation 36 KDE spin, using on any other system may result in config corruption."
+echo "This script is meant for Fedora Workstation 36 KDE spin, using it on any other distro isn't guaranteed to work."
 
 if [ $# -le 0 ]; then
 	echo "Available options: --all, --all-packages, --visual, --repos, --packages"
@@ -562,7 +571,7 @@ else
 	export SUDO_PERSIST_PID=$!
 	
 	# https://stackoverflow.com/questions/64786/error-handling-in-bash
-	trap clean_sudo_persist ERR
+	trap clean_sudo_persist_err ERR
 	
 	set -e
 	EXEC_FL=0
@@ -591,7 +600,9 @@ else
 		  app_packages
 		  # https://stackoverflow.com/questions/2720014/how-to-upgrade-all-python-packages-with-pip
 		  succ_echo "updating pip packages..."
-		  pip list --outdated --format=freeze | grep -v '^\-e' | cut -d = -f 1  | xargs -n1 pip install -U
+		  # pip list --outdated --format=freeze | grep -v '^\-e' | cut -d = -f 1  | xargs -n1 pip install -U
+		  # https://discuss.python.org/t/pip-22-3-list-list-format-freeze-can-not-be-used-with-the-outdated-option/20061/2
+		  pip list --outdated --format=json | jq -r '.[] | "\(.name)==\(.latest_version)"' | xargs -n1 pip3 install -U
 		  main_configs
 		  visual
 		  succ_echo "a reboot is required for some changes to take effect..."
