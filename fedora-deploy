@@ -10,7 +10,7 @@ repos(){
 	succ_echo "installing third-party repositories..."
 	sudo dnf install fedora-workstation-repositories -y
 	succ_echo "adding double commander repository..."
-	sudo dnf config-manager --add-repo https://download.opensuse.org/repositories/home:Alexx2000/Fedora_36/home:Alexx2000.repo
+	sudo dnf config-manager --add-repo https://download.opensuse.org/repositories/home:Alexx2000/Fedora_${_FVER}/home:Alexx2000.repo
 	succ_echo "adding tor repository..."
 	cat << EOF | sudo tee -a /etc/yum.repos.d/Tor.repo
 [tor]
@@ -554,7 +554,8 @@ codium okteta rubygems strace keepassxc"
 
 source ./packages
 
-echo "This script is meant for Fedora Workstation 36 KDE spin, using it on any other distro isn't guaranteed to work."
+export _FVER=37
+echo "This script is meant for Fedora Workstation ${_FVER} KDE spin, using it on any other distro isn't guaranteed to work."
 
 if [ $# -le 0 ]; then
 	echo "Available options: --all, --all-packages, --visual, --repos, --packages"
