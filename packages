@@ -5,7 +5,5 @@ export WINDSCRIBE_RPM="https://github.com/Windscribe/Desktop-App/releases/downlo
 export UMLET_ZIP="https://www.umlet.com/download/umlet_15_0/umlet-standalone-15.0.0.zip"
 # http://sourceforge.net/projects/refind/files/0.13.3.1/refind-0.13.3.1-1.x86_64.rpm/download
 export RAR_GZ="https://www.rarlab.com/rar/rarlinux-x64-612.tar.gz"
-# https://gamejolt.com/games/sanicball/17385
-export SANIC_BALL_ZIP="https://cdn-files.gamejolt.net/m3T634-c3jJCBHps5hZTEg==,1661276183/data/games/0/135/17385/files/5b5f3100a8e3d/sanicball-v0.8.2-linux.zip"
 # https://www.eclipse.org/downloads/packages/release/2022-06/r/eclipse-ide-java-developers
 export ECLIPSE_GZ="https://ftp.snt.utwente.nl/pub/software/eclipse/technology/epp/downloads/release/2022-06/R/eclipse-java-2022-06-R-linux-gtk-x86_64.tar.gz"

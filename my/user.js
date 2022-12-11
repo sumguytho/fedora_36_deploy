@@ -12,3 +12,5 @@ user_pref("browser.newtabpage.activity-stream.asrouter.userprefs.cfr.features", 
 
 user_pref("app.shield.optoutstudies.enabled", false);
 user_pref("datareporting.healthreport.uploadEnabled", false);
+
+user_pref("browser.tabs.inTitlebar", 1);

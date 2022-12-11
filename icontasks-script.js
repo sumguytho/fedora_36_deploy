@@ -1,7 +1,7 @@
 let icons = [
 'applications:windscribe.desktop',
 'applications:torbrowser.desktop',
-'applications:telegramdesktop.desktop',
+'applications:org.telegramdesktop.desktop',
 'preferred://filemanager',
 'preferred://browser',
 'applications:discord.desktop',

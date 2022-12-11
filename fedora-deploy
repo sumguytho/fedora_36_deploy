@@ -1,18 +1,71 @@
 #!/bin/bash
 
 
+assert_cached(){
+	basenm=`basename $1`
+	if [ -e $TMP_DIR/$basenm ]; then
+		return
+	fi
+	# https://stackoverflow.com/questions/965053/extract-filename-and-extension-in-bash
+	# exmpty extension defaults to git
+	ext=$([[ "$basenm" = *.* ]] && echo ".${basenm##*.}" || echo '.git')
+	if echo "$1" | grep :// >/dev/null; then
+		if [ $ext = ".git" ]; then
+			git clone $1 $TMP_DIR/$basenm/
+			return
+		fi
+		wget $1 -P $TMP_DIR/
+	else
+		cp $1 $TMP_DIR/
+	fi
+	mkdir $TMP_DIR/tmp_arch
+	case $ext in
+		.tar)
+		tar -xf $TMP_DIR/$basenm -C $TMP_DIR/tmp_arch/
+		;;
+		.gz)
+		tar -zxf $TMP_DIR/$basenm -C $TMP_DIR/tmp_arch/
+		;;
+		.zip)
+		unzip $TMP_DIR/$basenm -d $TMP_DIR/tmp_arch/ >/dev/null
+		;;
+		*)
+		rmdir $TMP_DIR/tmp_arch
+		return
+		;;
+	esac
+	rm $TMP_DIR/$basenm
+	mv $TMP_DIR/tmp_arch $TMP_DIR/$basenm
+}
+
+conf_backup(){
+	[ ! -e $1 ] && return
+	num=0
+	while : ; do
+		baknm="${1}_${num}.bak"
+		[ ! -e $baknm ] && break
+		(( ++num ))
+	done
+	cp $1 $baknm
+}
+
 repos(){
 	succ_echo "installing RPM Fusion repositories..."
-	sudo dnf install \
-	  https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm -y
-	sudo dnf install \
-	  https://download1.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-$(rpm -E %fedora).noarch.rpm -y
+
+	fusion_free="https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm"
+	fusion_nonfree="https://download1.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-$(rpm -E %fedora).noarch.rpm"
+	assert_cached $fusion_free
+	assert_cached $fusion_nonfree
+	fusion_free_base=$(basename $fusion_free)
+	fusion_nonfree_base=$(basename $fusion_nonfree)
+
+	sudo dnf install $TMP_DIR/$fusion_free_base $TMP_DIR/$fusion_nonfree_base -y
 	succ_echo "installing third-party repositories..."
 	sudo dnf install fedora-workstation-repositories -y
 	succ_echo "adding double commander repository..."
 	sudo dnf config-manager --add-repo https://download.opensuse.org/repositories/home:Alexx2000/Fedora_${_FVER}/home:Alexx2000.repo
 	succ_echo "adding tor repository..."
-	cat << EOF | sudo tee -a /etc/yum.repos.d/Tor.repo
+	cat << EOF | sudo tee /etc/yum.repos.d/Tor.repo
 [tor]
 name=Tor for Fedora \$releasever - \$basearch
 baseurl=https://rpm.torproject.org/fedora/\$releasever/\$basearch
@@ -23,11 +76,24 @@ cost=100
 EOF
 	succ_echo "adding vs-codium repository..."
 	sudo rpmkeys --import https://gitlab.com/paulcarroty/vscodium-deb-rpm-repo/-/raw/master/pub.gpg
-	printf "[gitlab.com_paulcarroty_vscodium_repo]\nname=download.vscodium.com\nbaseurl=https://download.vscodium.com/rpms/\nenabled=1\ngpgcheck=1\nrepo_gpgcheck=1\ngpgkey=https://gitlab.com/paulcarroty/vscodium-deb-rpm-repo/-/raw/master/pub.gpg\nmetadata_expire=1h" | sudo tee -a /etc/yum.repos.d/vscodium.repo
+	printf "[gitlab.com_paulcarroty_vscodium_repo]\nname=download.vscodium.com\nbaseurl=https://download.vscodium.com/rpms/\nenabled=1\ngpgcheck=1\nrepo_gpgcheck=1\ngpgkey=https://gitlab.com/paulcarroty/vscodium-deb-rpm-repo/-/raw/master/pub.gpg\nmetadata_expire=1h" | sudo tee /etc/yum.repos.d/vscodium.repo
+	echo ""
 }
 
 main_packages(){
 	succ_echo "installing main apps..."
+	DNF_PACKAGES=\
+"inotify-tools xmlstarlet xterm tmux lynx \
+toilet cmatrix sl vim-common \
+firefox steam gimp krita \
+vlc elisa-player obs-studio kate neofetch \
+java-11-openjdk-devel doublecmd-qt tor \
+python3-tools ddd graphviz filelight discord \
+telegram-desktop python3-pip torbrowser-launcher \
+qtcreator fish inxi i-nex sqlitebrowser wireshark \
+codium okteta rubygems strace keepassxc ffmpegthumbnailer \
+audacity clementine"
+
 	sudo dnf install $DNF_PACKAGES -y
 	succ_echo "installing pip..."
 	python3 -m pip install --upgrade pip
@@ -83,12 +149,18 @@ kicker(){
 	done
 }
 
-splash(){
+splash_theme(){
 	succ_echo "installing splash theme..."
+	assert_cached $SPLASH_THEME_GZ
+	SPLASH_BASE_GZ=$(basename $SPLASH_THEME_GZ)
+	SPLASH_BASE=$(ls $TMP_DIR/$SPLASH_BASE_GZ)
+	if [ -e ~/.local/share/plasma/look-and-feel/$SPLASH_BASE ]; then
+		succ_echo "splash theme is already installed, skipping..."
+	fi
+
 	mkdir -p ~/.local/share/plasma/look-and-feel/
-	tar -zxf $SPLASH_THEME -C ~/.local/share/plasma/look-and-feel/
-	SPLASH_BASE=$(basename $SPLASH_THEME)
-	kwriteconfig5 --file ksplashrc --group KSplash --key Theme "${SPLASH_BASE%%.*}"
+	cp -r $TMP_DIR/$SPLASH_BASE_GZ/$SPLASH_BASE ~/.local/share/plasma/look-and-feel/
+	kwriteconfig5 --file ksplashrc --group KSplash --key Theme "${SPLASH_BASE}"
 }
 
 sddm_bg(){
@@ -102,7 +174,7 @@ sddm_bg(){
 
 sddm_cursor(){
 	succ_echo "changing sddm cursor pack..."
-	sudo sed -i "/\[Theme\]/a CursorTheme=Breeze_Snow" /etc/sddm.conf
+	sudo kwriteconfig5 --file /etc/sddm.conf --group Theme --key CursorTheme "Breeze_Snow"
 }
 
 sddm_tm_fmt(){
@@ -132,9 +204,24 @@ konsole_theme(){
 konsole_toolbars(){
 	succ_echo "disabling konsole toolbars..."
 	mkdir -p ~/.local/share/kxmlgui5/konsole
-	for file in "${KONSOLE_TOOLBARS_FIX[@]}"; do
+	contents=$(ls ~/.local/share/kxmlgui5/konsole)
+	if [ ! -z $contents ]; then
+		succ_echo "toolsbars are already disabled, skipping..."
+		return
+	fi
+
+	kons_base=$(basename $KONSOLE_TOOLBARS_REPO)
+	pwd_old=$PWD
+	assert_cached $KONSOLE_TOOLBARS_REPO
+	cd $TMP_DIR/$kons_base
+	git reset --hard $KONSOLE_TOOLBARS_REV
+	git apply $pwd_old/$KONSOLE_TOOLBARS_FIX
+
+	repl_files=(desktop/{konsole,session}ui.rc)
+	for file in "${repl_files[@]}"; do
 		cp $file ~/.local/share/kxmlgui5/konsole/
 	done
+	cd $pwd_old
 }
 
 konsole_tweaks(){
@@ -174,21 +261,29 @@ panel_reorder_tweak(){
 }
 
 # https://fedoraproject.org/wiki/GRUB_2
-# https://store.kde.org/p/1757215 ## old theme is https://store.kde.org/p/1000140
-# https://www.reddit.com/r/Fedora/comments/swhqsi/grub_customization_issue/
 grub_theme(){
 	succ_echo 'installing grub theme...'
-	sudo tar -xf $GRUB_THEME -C $HOME
-	pushd $PWD
-	cd ~/grub2
-	sudo konsole -e "./install.sh -b"
-	cd ..
-	rm -rf grub2
-	popd
-	
-	sudo grub2-mkconfig -o /etc/grub2.cfg
-	sudo grub2-mkconfig -o /etc/grub2-efi.cfg
+	if grep -i -e "matter theme" -e matter/theme /etc/default/grub; then
+		succ_echo "grub theme is already installed, skipping..."
+		return
+	fi
+	sudo dnf install inkscape -y
+	assert_cached $GRUB_THEME_REPO
+	GRUB_THEME_BASE=$(basename $GRUB_THEME_REPO)
+	grub_font=$(find /usr/share/fonts -name "Comfortaa-Regular.ttf")
+
+	# fedora grub fix
+	echo 'GRUB_ENABLE_BLSCFG="false"' | sudo tee -a /etc/default/grub
 	sudo grub2-mkconfig -o /boot/grub2/grub.cfg
+	cp $SIMPLE_COLLATE $TMP_DIR/$GRUB_THEME_BASE/
+
+	pwd_old=$PWD
+	cd $TMP_DIR/$GRUB_THEME_BASE
+	git reset --hard $GRUB_THEME_REV
+	cp $pwd_old/$SIMPLE_COLLATE ./
+	grub_labels=$(sudo ./$SIMPLE_COLLATE)
+	sudo ./matter.py -i $grub_labels -hl FFC107 -fg white -bg 073b4c -ff $grub_font -fn Comfortaa Regular -fs 20
+	cd $pwd_old
 }
 
 preview_delay_tweak(){
@@ -215,6 +310,8 @@ shell_prompt_format(){
 	PS1="\n\[${BoldGreen}\]\u\[${TextReset}\]\[${Gray}\]@\[${TextReset}\]\[${BoldBlue}\]\h\[${TextReset}\]\[${Gray}\] \t \[${TextReset}\]\[${BoldCyan}\]\w\[${TextReset}\]\[${White}\] \[${TextReset}\]\n$ "
 	sed -i "s/^PS1=.*//g" ~/.bashrc
 	echo "PS1=\"$PS1\"" | tee -a ~/.bashrc
+	sed -i "s/^unset command_not_found_handle*//g" ~/.bashrc
+	echo "unset command_not_found_handle" | tee -a ~/.bashrc
 }
 
 screensaving_tweaks(){
@@ -224,6 +321,9 @@ screensaving_tweaks(){
 	kwriteconfig5 --file powermanagementprofilesrc --group AC --group SuspendSession --key idleTime "1800000"
 	kwriteconfig5 --file powermanagementprofilesrc --group AC --group SuspendSession --key suspendThenHibernate --type bool 0
 	kwriteconfig5 --file powermanagementprofilesrc --group AC --group SuspendSession --key suspendType "1"
+	# maybe make its own func later
+	# shutdown on powerbtn press
+	kwriteconfig5 --file powermanagementprofilesrc --group AC --group HandleButtonEvents --key powerButtonAction "8"
 }
 
 visual(){
@@ -237,7 +337,7 @@ visual(){
 	panel_reorder_tweak
 	gtk_theme_tweak
 	sddm_tweaks
-	splash
+	splash_theme
 	screensaving_tweaks
 	lock_bg
 	cursor_tweak
@@ -250,20 +350,27 @@ visual(){
 
 rar_unrar(){
 	succ_echo "installing rar..."
-	wget $RAR_GZ
+	if which rar >/dev/null 2>&1; then
+		succ_echo "rar is already installed, skipping..."
+		return
+	fi
+	assert_cached $RAR_GZ
 	RAR_B=$(basename $RAR_GZ)
-	tar -zxf $RAR_B
-	rm $RAR_B
+	subdir=`ls $TMP_DIR/$RAR_B`
 	
-	cd rar
+	pushd $PWD
+	cd $TMP_DIR/$RAR_B/$subdir
 	sudo make install
-	cd ..
-	rm -rf rar
+	popd
 }
 
 # https://github.com/autokey/autokey
 autokey(){
 	succ_echo "Installing autokey..."
+	if pip freeze | grep autokey >/dev/null; then
+		succ_echo "autokey is already installed, skipping..."
+		return
+	fi
 	pip3 install autokey
 	pip3 install qscintilla pyqt5
 	sudo dnf install wmctrl -y
@@ -271,73 +378,66 @@ autokey(){
 
 ghidra(){
 	succ_echo "installing ghidra..."
-	wget $GHIDRA_ZIP
-	GHIDRA_BASENAME=$(basename $GHIDRA_ZIP)
-	unzip $GHIDRA_BASENAME >/dev/null
-	rm $GHIDRA_BASENAME
-	LEN=$(expr length $GHIDRA_BASENAME)
+	assert_cached $GHIDRA_ZIP
+	GHIDRA_ZIP_BASENAME=$(basename $GHIDRA_ZIP)
+	GHIDRA_BASENAME=$(ls $TMP_DIR/$GHIDRA_ZIP_BASENAME)
+	LEN=$(expr length $GHIDRA_ZIP_BASENAME)
+	# timestamp + extension
+	CULL_SZ=13
 	NEWLEN=$(expr $LEN - 13)
 	GHIDRA_BASENAME=$(expr substr $GHIDRA_BASENAME 1 $NEWLEN)
-	rm -rf ~/Apps/$GHIDRA_BASENAME
-	mv $GHIDRA_BASENAME ~/Apps/
+	if [ -e ~/Apps/$GHIDRA_BASENAME ]; then
+		succ_echo "ghidra is already installed, skipping..."
+		return
+	fi
+	cp -r $TMP_DIR/$GHIDRA_ZIP_BASENAME/$GHIDRA_BASENAME ~/Apps/
 	export GHIDRA_PATH=$HOME/Apps/$GHIDRA_BASENAME
 	cat $GHIDRA_TEMPL | envsubst > ~/.local/share/applications/$(basename $GHIDRA_TEMPL)
 }
 
 umlet(){
 	succ_echo "installing umlet..."
-	wget $UMLET_ZIP
-	
-	UMLET_BASE=$(basename $UMLET_ZIP)
-	unzip $UMLET_BASE >/dev/null
-	rm $UMLET_BASE
-	UMLET_DIR=$(ls | grep -i umlet)
-	rm -rf ~/Apps/$UMLET_DIR
-	mv $UMLET_DIR ~/Apps/
+	assert_cached $UMLET_ZIP
+	UMLET_ZIP_BASE=$(basename $UMLET_ZIP)
+	UMLET_BASE=$(ls $TMP_DIR/$UMLET_ZIP_BASE)
+	if [ -e ~/Apps/$UMLET_BASE ]; then
+		succ_echo "umlet is already installed, skipping..."
+		return
+	fi
+	cp -r $TMP_DIR/$UMLET_ZIP_BASE/$UMLET_BASE ~/Apps/
 	
 	JAVA_DIR=/usr/lib/jvm/java-11-openjdk
-	EXECP=$(echo $HOME/Apps/Umlet/umlet.sh | sed 's|/|\\/|g')
-	sed -i "s/^Exec=.*/Exec=$EXECP/g" $HOME/Apps/$UMLET_DIR/umlet.desktop
+	EXECP=$(echo $HOME/Apps/$UMLET_BASE/umlet.sh | sed 's|/|\\/|g')
+	sed -i "s/^Exec=.*/Exec=$EXECP/g" $HOME/Apps/$UMLET_BASE/umlet.desktop
 	
-	IMGP=$(echo $HOME/Apps/Umlet/img/umlet_logo.png | sed 's|/|\\/|g')
-	sed -i "s/^Icon=.*/Icon=$IMGP/g" $HOME/Apps/$UMLET_DIR/umlet.desktop
+	IMGP=$(echo $HOME/Apps/$UMLET_BASE/img/umlet_logo.png | sed 's|/|\\/|g')
+	sed -i "s/^Icon=.*/Icon=$IMGP/g" $HOME/Apps/$UMLET_BASE/umlet.desktop
 	
-	cp ~/Apps/$UMLET_DIR/umlet.desktop ~/.local/share/applications/
-	chmod +x ~/Apps/$UMLET_DIR/umlet.sh
-	sed -i "/^_UMLET_HOME=.*/i export JAVA_HOME=$JAVA_DIR" $HOME/Apps/Umlet/umlet.sh
+	cp ~/Apps/$UMLET_BASE/umlet.desktop ~/.local/share/applications/
+	chmod +x ~/Apps/$UMLET_BASE/umlet.sh
+	sed -i "/^_UMLET_HOME=.*/i export JAVA_HOME=$JAVA_DIR" $HOME/Apps/$UMLET_BASE/umlet.sh
 }
 
 windscribe(){
 	succ_echo "installing windscribe..."
-	sudo rpm -i $WINDSCRIBE_RPM
-}
-
-# something something, 60% of the time
-sanic_ball(){
-	succ_echo 'installing sanic ball???'
-	wget $SANIC_BALL_ZIP
-	SANIC_BASE=$(basename $SANIC_BALL_ZIP)
-	mkdir ~/Apps/SanicBall
-	unzip -d ~/Apps/SanicBall/ $SANIC_BASE >/dev/null
-	rm $SANIC_BASE
-	
-	# TODO: substitude Sanicball_v0.8.2_Data with ls
-	export SANIC_ICON=$HOME/Apps/SanicBall/Sanicball_v0.8.2_Data/Resources/UnityPlayer.png
-	export SANIC_EXEC=$HOME/Apps/SanicBall/Sanicball_v0.8.2.x86_64
-	chmod +x $SANIC_EXEC
-	cat $SANIC_TEMPL | envsubst > ~/.local/share/applications/$(basename $SANIC_TEMPL)
+	assert_cached $WINDSCRIBE_RPM
+	WINDSCRIBE_RPM_BASE=$(basename $WINDSCRIBE_RPM)
+	sudo rpm -i --replacepkgs $TMP_DIR/$WINDSCRIBE_RPM_BASE
 }
 
 eclipse_ide(){
 	succ_echo "installing eclipse..."
-	wget $ECLIPSE_GZ
-	ECLIPSE_BASE=$(basename $ECLIPSE_GZ)
-	rm -rf ~/Apps/EclipseJava
-	tar -zxf $ECLIPSE_BASE -C ~/Apps/
-	mv ~/Apps/eclipse ~/Apps/EclipseJava
+	assert_cached $ECLIPSE_GZ
+	ECLIPSE_GZ_BASE=$(basename $ECLIPSE_GZ)
+	ECLIPSE_BASE=$(ls $TMP_DIR/$ECLIPSE_GZ_BASE)
+	if [ -e ~/Apps/$ECLIPSE_BASE ]; then
+		succ_echo "eclipse jdt is already installed, skipping..."
+		return
+	fi
+	cp -r $TMP_DIR/$ECLIPSE_GZ_BASE/$ECLIPSE_BASE ~/Apps/
 	
-	export ECLIPSE_EXEC=$HOME/Apps/EclipseJava/eclipse
-	export ECLIPSE_ICON=$HOME/Apps/EclipseJava/icon.xpm
+	export ECLIPSE_EXEC=$HOME/Apps/$ECLIPSE_BASE/eclipse
+	export ECLIPSE_ICON=$HOME/Apps/$ECLIPSE_BASE/icon.xpm
 	chmod +x $ECLIPSE_EXEC
 	cat $ECLIPSE_TEMPL | envsubst > ~/.local/share/applications/$(basename $ECLIPSE_TEMPL)
 }
@@ -350,7 +450,6 @@ app_packages(){
 	ghidra
 	umlet
 	windscribe
-	# sanic_ball
 	eclipse_ide
 }
 
@@ -371,10 +470,10 @@ file_associations_tweak(){
 	done
 	succ_echo "replacing mimeapps..."
 	TG_HANDL=$(kreadconfig5 --file mimeapps.list --group "Default Applications" --key "x-scheme-handler/tg")
+	conf_backup ~/.config/mimeapps.list
 	cp $DEFAULT_APPS ~/.config/
 	kwriteconfig5 --file mimeapps.list --group "Added Associations" --key "x-scheme-handler/tg" "${TG_HANDL};"
 	kwriteconfig5 --file mimeapps.list --group "Default Applications" --key "x-scheme-handler/tg" "${TG_HANDL}"
-	# xdg-settings set default-web-browser google-chrome.desktop
 	succ_echo "updating system cache..."
 	kbuildsycoca5
 }
@@ -388,10 +487,21 @@ postinstall_cleanup(){
 	succ_echo "unlinking kate from favourites..."
 	qdbus org.kde.ActivityManager /ActivityManager/Resources/Linking UnlinkResourceFromActivity \
 		"org.kde.plasma.favorites.applications" "org.kde.kate.desktop" ":any"
+	succ_echo "linking system monitor to favorites..."
+	qdbus org.kde.ActivityManager /ActivityManager/Resources/Linking LinkResourceToActivity \
+		"org.kde.plasma.favorites.applications" "applications:org.kde.plasma-systemmonitor" ":any"
 	succ_echo "removing gambas3 desktop file..."
 	sudo rm -f /usr/share/applications/gambas3.desktop
 	succ_echo "removing autokey-gtk desktop file..."
 	sudo rm -f ~/.local/share/applications/autokey-gtk.desktop
+}
+
+autologin_tweak(){
+	succ_echo "enabling autologin for user..."
+	sudo touch /etc/sddm.conf.d/kde_settings.conf
+	sudo kwriteconfig5 --file /etc/sddm.conf.d/kde_settings.conf --group Autologin --key Relogin "false"
+	sudo kwriteconfig5 --file /etc/sddm.conf.d/kde_settings.conf --group Autologin --key Session "plasmax11"
+	sudo kwriteconfig5 --file /etc/sddm.conf.d/kde_settings.conf --group Autologin --key User "$USER"
 }
 
 doublecmd_confs(){
@@ -401,6 +511,7 @@ doublecmd_confs(){
 		succ_echo "doublecmd didn't yet generate config file, launching it..."
 		brief_launch doublecmd
 	done
+	conf_backup $DCMD_CONF
 	xmlstarlet ed --inplace \
 		-u '/doublecmd/Behaviours/ShowSystemFiles' -v 'True' \
 		-u '/doublecmd/Behaviours/DateTimeFormat' -v 'dd/mm/yyyy hh:nn:ss' \
@@ -411,6 +522,7 @@ doublecmd_confs(){
 	
 	# https://stackoverflow.com/questions/11618715/xmlstarlet-to-insert-tags
 	# https://stackoverflow.com/questions/5954168/how-to-insert-a-new-element-under-another-with-xmlstarlet
+	conf_backup $DCMD_SCF
 	xmlstarlet ed -L -s $SUBNODE -t elem -n HotkeyTMP -v "" \
 		-s //HotkeyTMP -t elem -n 'Shortcut' -v 'Ctrl+Shift+1' \
 		-s //HotkeyTMP -t elem -n 'Command' -v 'cm_PanelsSplitterPerPos' \
@@ -437,6 +549,7 @@ windscribe_confs(){
 		succ_echo "windscibe didn't yet generate config file, launching it..."
 		brief_launch /usr/local/windscribe/Windscribe
 	done
+	conf_backup $WIND_CONF
 	sed -i "s/guiSettings=@ByteArray(\\\b\\\x1)/guiSettings=@ByteArray(\\\b\\\x0)/g" $WIND_CONF
 	sed -i "s/guiSettings=@ByteArray()/guiSettings=@ByteArray(\\\b\\\x0)/g" $WIND_CONF
 	rm -f $HOME/.config/autostart/windscribe.desktop
@@ -448,6 +561,12 @@ codium_confs(){
 	codium --install-extension ms-vscode.hexeditor
 	codium --install-extension llvm-vs-code-extensions.vscode-clangd
 	codium --install-extension ms-python.python
+
+	succ_echo "changing vs-codium user settings..."
+	CODIUM_CONF=~/.config/VSCodium/User/settings.json
+	mkdir -p `dirname $CODIUM_CONF`
+	conf_backup $CODIUM_CONF
+	cp $CODIUM_SETTINGS $CODIUM_CONF
 }
 
 desktop_icons() {
@@ -484,9 +603,10 @@ firefox_confs() {
 	def_prof=`echo ~/.mozilla/firefox/*.default-release`
 	if [ ${#def_prof[@]} -ne 1 ]; then
 		succ_echo "more then one firefox profile found, skipping..."
-		return 0
+		return
 	fi
-	cp ./my/user.js $def_prof/
+	conf_backup $def_prof/`basename $FIREFOX_SETTINGS`
+	cp $FIREFOX_SETTINGS $def_prof/
 }
 
 # also handles stuff that depends on certain things being installed
@@ -494,6 +614,8 @@ main_configs(){
 	file_associations_tweak
 	icontasks_tweak
 	postinstall_cleanup
+	autologin_tweak
+
 	doublecmd_confs
 	desktop_icons
 	windscribe_confs
@@ -502,6 +624,28 @@ main_configs(){
 	
 	succ_echo "adding user to wireshark group..."
 	sudo usermod -aG wireshark $USER
+}
+
+pip_pkg_update(){
+	succ_echo "updating pip packages..."
+	# https://stackoverflow.com/questions/2720014/how-to-upgrade-all-python-packages-with-pip
+	# pip list --outdated --format=freeze | grep -v '^\-e' | cut -d = -f 1  | xargs -n1 pip install -U
+	# https://discuss.python.org/t/pip-22-3-list-list-format-freeze-can-not-be-used-with-the-outdated-option/20061/2
+	PIP_PREREQUISITES=\
+"meson dbus-devel glib2-devel python3-devel cairo cairo-devel gobject-introspection-devel cairo-gobject-devel"
+
+	sudo dnf install $PIP_PREREQUISITES -y
+	ATTEMPTS=5
+	while [ $ATTEMPTS -gt 0 ]; do
+		pip_pkg_list=`pip list --outdated --format=json | jq -r '.[] | "\(.name)==\(.latest_version)"'`
+		if [ -z pip_pkg_list ];then
+			return
+		fi
+		for pippkg in ${pip_pkg_list[*]}; do
+			pip3 install -U --user $pippkg
+		done
+		(( ATTEMPTS-- ))
+	done
 }
 
 succ_echo(){
@@ -541,29 +685,18 @@ export LOCKS_TARG="/usr/share/backgrounds/$LOCKS_BASE"
 export LOCKSE_TARG=$(echo $LOCKS_TARG | sed 's|/|\\/|g')
 
 
-export DNF_PACKAGES=\
-"inotify-tools xmlstarlet xterm tmux lynx \
-toilet cmatrix sl vim-common \
-firefox steam gimp krita \
-vlc elisa-player obs-studio kate neofetch \
-java-11-openjdk-devel doublecmd-qt tor \
-python3-tools ddd graphviz filelight discord \
-telegram-desktop python3-pip torbrowser-launcher \
-qtcreator fish inxi i-nex sqlitebrowser wireshark \
-codium okteta rubygems strace keepassxc"
-
 source ./packages
 
 export _FVER=37
 echo "This script is meant for Fedora Workstation ${_FVER} KDE spin, using it on any other distro isn't guaranteed to work."
+echo "This script assumes a fresh install and will override certain configs."
 
 if [ $# -le 0 ]; then
 	echo "Available options: --all, --all-packages, --visual, --repos, --packages"
 	echo ""
-	echo "--packages-main, --packages-app"
+	echo "--rm-cache (should be the first argument)"
 	echo ""
-	echo "	--visual-containments, --visual-keyboard,"
-	echo "	--visual-screen, --visual-apps"
+	echo "--packages-main, --packages-app"
 else
 	# https://unix.stackexchange.com/questions/625645/how-to-make-sudo-not-expire-while-script-is-running
 	sudo -v
@@ -574,7 +707,7 @@ else
 	# https://stackoverflow.com/questions/64786/error-handling-in-bash
 	trap clean_sudo_persist_err ERR
 	
-	set -e
+	set -eE -o pipefail
 	EXEC_FL=0
 	
 	if ! command -v git >/dev/null 2>&1; then
@@ -591,6 +724,8 @@ else
 		succ_echo "directory '$COMMON_GIT_DIR' doesn't exist, cloning it..."
 		git clone $COMMON_GIT $COMMON_GIT_DIR
 	fi
+
+	mkdir -p $TMP_DIR
 	
 	for i in "$@"; do
 	  case $i in
@@ -599,11 +734,7 @@ else
 		  repos
 		  main_packages
 		  app_packages
-		  # https://stackoverflow.com/questions/2720014/how-to-upgrade-all-python-packages-with-pip
-		  succ_echo "updating pip packages..."
-		  # pip list --outdated --format=freeze | grep -v '^\-e' | cut -d = -f 1  | xargs -n1 pip install -U
-		  # https://discuss.python.org/t/pip-22-3-list-list-format-freeze-can-not-be-used-with-the-outdated-option/20061/2
-		  pip list --outdated --format=json | jq -r '.[] | "\(.name)==\(.latest_version)"' | xargs -n1 pip3 install -U
+		  pip_pkg_update
 		  main_configs
 		  visual
 		  succ_echo "a reboot is required for some changes to take effect..."
@@ -613,32 +744,14 @@ else
 		  repos
 		  main_packages
 		  app_packages
+		  pip_pkg_update
+		  ;;
+		--rm-cache)
+		  rm -rf $TMP_DIR
+		  mkdir -p $TMP_DIR
 		  ;;
 		--visual)
 		  visual
-		  ;;
-		--visual-containments)
-		  wallpaper
-		  kicker
-		  showdesktop_tweak
-		  panel_reorder_tweak
-		  clock_tweak
-		  ;;
-		--visual-keyboard)
-		  numlock
-		  layouts
-		  ;;
-		--visual-screen)
-		  sddm_tweaks
-		  splash
-		  screensaving_tweaks
-		  lock_bg
-		  gtk_theme_tweak
-		  user_avatar_tweak
-		  shell_prompt_format
-		  ;;
-		--visual-apps)
-		  konsole_tweaks
 		  ;;
 		--repos)
 		  repos
@@ -650,7 +763,7 @@ else
 		--packages-main)
 		  main_packages
 		  ;;
-		----packages-app)
+		--packages-app)
 		  app_packages
 		  ;;
 		--func)

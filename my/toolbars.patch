@@ -1,0 +1,36 @@
+diff --git a/desktop/konsoleui.rc b/desktop/konsoleui.rc
+index 7b70d944..84530536 100644
+--- a/desktop/konsoleui.rc
++++ b/desktop/konsoleui.rc
+@@ -55,10 +55,10 @@
+         <Menu name="help"><text>Help</text>
+         </Menu>
+     </MenuBar>
+-    <ToolBar name="mainToolBar">
++    <!--ToolBar name="mainToolBar">
+         <text>Main Toolbar</text>
+         <index>0</index>
+         <Action name="new-tab"/>
+         <Action name="split-view"/>
+-    </ToolBar>
++    </ToolBar-->
+ </gui>
+diff --git a/desktop/sessionui.rc b/desktop/sessionui.rc
+index 4679e9e2..8032fa54 100644
+--- a/desktop/sessionui.rc
++++ b/desktop/sessionui.rc
+@@ -66,12 +66,12 @@
+         <Action name="switch-profile"/>
+         <Action name="edit-current-profile"/>
+     </Menu>
+-    <ToolBar name="sessionToolbar">
++    <!--ToolBar name="sessionToolbar">
+         <text>Session Toolbar</text>
+         <index>1</index>
+         <Spacer/>
+         <Action name="edit_copy" />
+         <Action name="edit_paste" />
+         <Action name="edit_find" />
+-    </ToolBar>
++    </ToolBar-->
+ </gui>
