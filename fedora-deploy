@@ -86,14 +86,15 @@ main_packages(){
 "inotify-tools xmlstarlet xterm tmux lynx \
 toilet cmatrix sl vim-common \
 firefox steam gimp krita \
-vlc elisa-player obs-studio kate neofetch \
+vlc kate neofetch \
 java-11-openjdk-devel doublecmd-qt tor \
 python3-tools ddd graphviz filelight discord \
 telegram-desktop python3-pip torbrowser-launcher \
 qtcreator fish inxi i-nex sqlitebrowser wireshark \
-codium okteta rubygems strace keepassxc ffmpegthumbnailer \
-audacity clementine"
+codium okteta rubygems strace keepassxc \
+audacity clementine ffmpegthumbnailer"
 
+	sudo dnf install obs-studio -y --allowerasing
 	sudo dnf install $DNF_PACKAGES -y
 	succ_echo "installing pip..."
 	python3 -m pip install --upgrade pip
@@ -632,7 +633,8 @@ pip_pkg_update(){
 	# pip list --outdated --format=freeze | grep -v '^\-e' | cut -d = -f 1  | xargs -n1 pip install -U
 	# https://discuss.python.org/t/pip-22-3-list-list-format-freeze-can-not-be-used-with-the-outdated-option/20061/2
 	PIP_PREREQUISITES=\
-"meson dbus-devel glib2-devel python3-devel cairo cairo-devel gobject-introspection-devel cairo-gobject-devel"
+"meson dbus-devel glib2-devel python3-devel cairo cairo-devel gobject-introspection-devel \
+cairo-gobject-devel libcurl-devel openssl-devel"
 
 	sudo dnf install $PIP_PREREQUISITES -y
 	ATTEMPTS=5

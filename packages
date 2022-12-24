@@ -1,9 +1,12 @@
 #!/bin/bash
 # the rest of the packages
-export GHIDRA_ZIP="https://github.com/NationalSecurityAgency/ghidra/releases/download/Ghidra_10.1.5_build/ghidra_10.1.5_PUBLIC_20220726.zip"
+# https://github.com/NationalSecurityAgency/ghidra/releases
+export GHIDRA_ZIP="https://github.com/NationalSecurityAgency/ghidra/releases/download/Ghidra_10.2.2_build/ghidra_10.2.2_PUBLIC_20221115.zip"
+# https://github.com/Windscribe/Desktop-App/releases
 export WINDSCRIBE_RPM="https://github.com/Windscribe/Desktop-App/releases/download/v2.4.11/windscribe_2.4.11_x86_64.rpm"
+# https://www.umlet.com/download/
 export UMLET_ZIP="https://www.umlet.com/download/umlet_15_0/umlet-standalone-15.0.0.zip"
-# http://sourceforge.net/projects/refind/files/0.13.3.1/refind-0.13.3.1-1.x86_64.rpm/download
+# https://www.rarlab.com/download.htm
 export RAR_GZ="https://www.rarlab.com/rar/rarlinux-x64-612.tar.gz"
-# https://www.eclipse.org/downloads/packages/release/2022-06/r/eclipse-ide-java-developers
-export ECLIPSE_GZ="https://ftp.snt.utwente.nl/pub/software/eclipse/technology/epp/downloads/release/2022-06/R/eclipse-java-2022-06-R-linux-gtk-x86_64.tar.gz"
+# https://www.eclipse.org/downloads/packages/release
+export ECLIPSE_GZ="https://mirror.dogado.de/eclipse/technology/epp/downloads/release/2022-12/R/eclipse-java-2022-12-R-linux-gtk-x86_64.tar.gz"

@@ -24,7 +24,7 @@ def collate_entry(entry):
 
 def collate_entries(entries):
     res = []
-    for i, m in enumerate(entries):
+    for m in entries:
         entryname = m['entryname']
         res.append(collate_entry(entryname))
     return ' '.join(res)

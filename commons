@@ -3,7 +3,7 @@
 # a repo with files used below
 export COMMON_GIT="https://github.com/sumguytho/fedora_common.git"
 export COMMON_GIT_DIR="common"
-export TMP_DIR="tmp"
+export TMP_DIR="../fedora_deploy_tmp"
 export PROFILE_PIC="common/tierm.jpg"
 # wallpaper
 export WALLP="common/XT39323.jpg"
