@@ -49,6 +49,14 @@ conf_backup(){
 	cp $1 $baknm
 }
 
+# https://superuser.com/questions/1111219/can-i-get-all-functions-in-a-script-file-using-bash
+list_funcs(){
+	echo "Available functions:"
+	for func in `declare -F | cut -d ' ' -f3`; do
+		echo "  $func"
+	done
+}
+
 repos(){
 	succ_echo "installing RPM Fusion repositories..."
 
@@ -781,6 +789,10 @@ else
 		  ;;
 	  esac
 	done
+
+	if [ $EXEC_FL -eq 1 ]; then
+		list_funcs
+	fi
 
 	clean_sudo_persist
 fi
