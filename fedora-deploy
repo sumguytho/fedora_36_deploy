@@ -98,9 +98,10 @@ vlc kate neofetch \
 java-11-openjdk-devel doublecmd-qt tor \
 python3-tools ddd graphviz filelight discord \
 telegram-desktop python3-pip torbrowser-launcher \
-qtcreator fish inxi i-nex sqlitebrowser wireshark \
+qtcreator fish inxi cpu-x sqlitebrowser wireshark \
 codium okteta rubygems strace keepassxc \
-audacity clementine ffmpegthumbnailer"
+audacity clementine ffmpegthumbnailer \
+gperftools valgrind perf hotspot"
 
 	sudo dnf install obs-studio -y --allowerasing
 	sudo dnf install $DNF_PACKAGES -y
@@ -354,7 +355,6 @@ visual(){
 	preview_delay_tweak
 	user_avatar_tweak
 	shell_prompt_format
-	grub_theme
 }
 
 rar_unrar(){
