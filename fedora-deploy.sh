@@ -90,18 +90,20 @@ EOF
 
 main_packages(){
 	succ_echo "installing main apps..."
-	DNF_PACKAGES=\
-"inotify-tools xmlstarlet xterm tmux lynx \
+	DNF_PACKAGES="\
+inotify-tools xmlstarlet xterm tmux lynx \
 toilet cmatrix sl vim-common \
-firefox steam gimp krita \
-vlc kate neofetch \
+firefox chromium steam gimp krita \
+vlc kate neofetch java-17-openjdk-devel \
 java-11-openjdk-devel doublecmd-qt tor \
 python3-tools ddd graphviz filelight discord \
 telegram-desktop python3-pip torbrowser-launcher \
 qtcreator fish inxi cpu-x sqlitebrowser wireshark \
 codium okteta rubygems strace keepassxc \
 audacity clementine ffmpegthumbnailer \
-gperftools valgrind perf hotspot"
+gperftools valgrind perf hotspot iperf3 \
+kchmviewer \
+"
 
 	sudo dnf install obs-studio -y --allowerasing
 	sudo dnf install $DNF_PACKAGES -y
@@ -213,25 +215,12 @@ konsole_theme(){
 
 konsole_toolbars(){
 	succ_echo "disabling konsole toolbars..."
-	mkdir -p ~/.local/share/kxmlgui5/konsole
-	contents=$(ls ~/.local/share/kxmlgui5/konsole)
-	if [ ! -z $contents ]; then
-		succ_echo "toolsbars are already disabled, skipping..."
-		return
-	fi
 
-	kons_base=$(basename $KONSOLE_TOOLBARS_REPO)
-	pwd_old=$PWD
-	assert_cached $KONSOLE_TOOLBARS_REPO
-	cd $TMP_DIR/$kons_base
-	git reset --hard $KONSOLE_TOOLBARS_REV
-	git apply $pwd_old/$KONSOLE_TOOLBARS_FIX
-
-	repl_files=(desktop/{konsole,session}ui.rc)
-	for file in "${repl_files[@]}"; do
-		cp $file ~/.local/share/kxmlgui5/konsole/
-	done
-	cd $pwd_old
+	# substituting xml files no longer works, they are just renamed to .backup files,
+	# just change state and hope that this blob doesn't contain something dangerously
+	# outdated, the next step is to switch to some other terminal
+	NO_TOOLSBARS_STATE="AAAA/wAAAAD9AAAAAQAAAAAAAAAAAAAAAPwCAAAAAvsAAAAiAFEAdQBpAGMAawBDAG8AbQBtAGEAbgBkAHMARABvAGMAawAAAAAA/////wAAAXwBAAAD+wAAABwAUwBTAEgATQBhAG4AYQBnAGUAcgBEAG8AYwBrAAAAAAD/////AAABFQEAAAMAAAOPAAACKAAAAAQAAAAEAAAACAAAAAj8AAAAAQAAAAIAAAACAAAAFgBtAGEAaQBuAFQAbwBvAGwAQgBhAHIAAAAAAP////8AAAAAAAAAAAAAABwAcwBlAHMAcwBpAG8AbgBUAG8AbwBsAGIAYQByAAAAAAD/////AAAAAAAAAAA="
+	kwriteconfig5 --file konsolerc --group MainWindow --key State "$NO_TOOLSBARS_STATE"
 }
 
 konsole_tweaks(){
@@ -270,32 +259,6 @@ panel_reorder_tweak(){
 	qdbus org.kde.plasmashell /PlasmaShell evaluateScript "$(cat reorder-script.js)"
 }
 
-# https://fedoraproject.org/wiki/GRUB_2
-grub_theme(){
-	succ_echo 'installing grub theme...'
-	if grep -i -e "matter theme" -e matter/theme /etc/default/grub; then
-		succ_echo "grub theme is already installed, skipping..."
-		return
-	fi
-	sudo dnf install inkscape -y
-	assert_cached $GRUB_THEME_REPO
-	GRUB_THEME_BASE=$(basename $GRUB_THEME_REPO)
-	grub_font=$(find /usr/share/fonts -name "Comfortaa-Regular.ttf")
-
-	# fedora grub fix
-	echo 'GRUB_ENABLE_BLSCFG="false"' | sudo tee -a /etc/default/grub
-	sudo grub2-mkconfig -o /boot/grub2/grub.cfg
-	cp $SIMPLE_COLLATE $TMP_DIR/$GRUB_THEME_BASE/
-
-	pwd_old=$PWD
-	cd $TMP_DIR/$GRUB_THEME_BASE
-	git reset --hard $GRUB_THEME_REV
-	cp $pwd_old/$SIMPLE_COLLATE ./
-	grub_labels=$(sudo ./$SIMPLE_COLLATE)
-	sudo ./matter.py -i $grub_labels -hl FFC107 -fg white -bg 073b4c -ff $grub_font -fn Comfortaa Regular -fs 20
-	cd $pwd_old
-}
-
 preview_delay_tweak(){
 	succ_echo "changing tooltip delay..."
 	# i guess that's the closest i can get to tooltip on click
@@ -307,6 +270,16 @@ user_avatar_tweak(){
 	sudo mkdir -p /var/lib/AccountsService/icons/
 	sudo cp $PROFILE_PIC /var/lib/AccountsService/icons/$USER
 	sudo chmod 644 /var/lib/AccountsService/icons/$USER
+}
+
+kdewallet_tweak(){
+	succ_echo "disabling kdewallet subsystem..."
+
+	kwriteconfig5 --file kwalletrc --group Wallet --key Enabled --type bool 0
+	kwriteconfig5 --file kwalletrc --group Wallet --key "Launch Manager" --type bool 0
+	kwriteconfig5 --file kwalletrc --group Wallet --key "Leave Manager Open" --type bool 0
+	kwriteconfig5 --file kwalletrc --group Wallet --key "Prompt on Open" --type bool 0
+	kwriteconfig5 --file kwalletrc --group Wallet --key "First Use" --type bool 0
 }
 
 shell_prompt_format(){
@@ -427,14 +400,7 @@ umlet(){
 	sed -i "/^_UMLET_HOME=.*/i export JAVA_HOME=$JAVA_DIR" $HOME/Apps/$UMLET_BASE/umlet.sh
 }
 
-windscribe(){
-	succ_echo "installing windscribe..."
-	assert_cached $WINDSCRIBE_RPM
-	WINDSCRIBE_RPM_BASE=$(basename $WINDSCRIBE_RPM)
-	sudo rpm -i --replacepkgs $TMP_DIR/$WINDSCRIBE_RPM_BASE
-}
-
-eclipse_ide(){
+eclipse_jdt(){
 	succ_echo "installing eclipse..."
 	assert_cached $ECLIPSE_GZ
 	ECLIPSE_GZ_BASE=$(basename $ECLIPSE_GZ)
@@ -458,31 +424,25 @@ app_packages(){
 	autokey
 	ghidra
 	umlet
-	windscribe
-	eclipse_ide
+	eclipse_jdt
 }
 
 brief_launch(){
+	# no idea how long it would take an app to initialize
+	# using sysvinit approach
 	BRIEF_SLEEP=10
 	$@ &
 	BRIEF_PID=$!
 	sleep ${BRIEF_SLEEP}s
 	kill $BRIEF_PID > /dev/null
-	sleep ${BRIEF_SLEEP}s
+	wait $BRIEF_PID
 }
 
 # might be unfinished
 file_associations_tweak(){
-	while ! ls ~/.local/share/applications/ | grep Telegram &>/dev/null; do
-		succ_echo "telegram didn't yet generate file associations, launching it..."
-		brief_launch telegram-desktop --
-	done
 	succ_echo "replacing mimeapps..."
-	TG_HANDL=$(kreadconfig5 --file mimeapps.list --group "Default Applications" --key "x-scheme-handler/tg")
 	conf_backup ~/.config/mimeapps.list
 	cp $DEFAULT_APPS ~/.config/
-	kwriteconfig5 --file mimeapps.list --group "Added Associations" --key "x-scheme-handler/tg" "${TG_HANDL};"
-	kwriteconfig5 --file mimeapps.list --group "Default Applications" --key "x-scheme-handler/tg" "${TG_HANDL}"
 	succ_echo "updating system cache..."
 	kbuildsycoca5
 }
@@ -509,7 +469,7 @@ autologin_tweak(){
 	succ_echo "enabling autologin for user..."
 	sudo touch /etc/sddm.conf.d/kde_settings.conf
 	sudo kwriteconfig5 --file /etc/sddm.conf.d/kde_settings.conf --group Autologin --key Relogin "false"
-	sudo kwriteconfig5 --file /etc/sddm.conf.d/kde_settings.conf --group Autologin --key Session "plasmax11"
+	sudo kwriteconfig5 --file /etc/sddm.conf.d/kde_settings.conf --group Autologin --key Session "plasma"
 	sudo kwriteconfig5 --file /etc/sddm.conf.d/kde_settings.conf --group Autologin --key User "$USER"
 }
 
@@ -518,7 +478,7 @@ doublecmd_confs(){
 	DCMD_CONF=$HOME/.config/doublecmd/doublecmd.xml
 	while ! ls $DCMD_CONF &>/dev/null; do
 		succ_echo "doublecmd didn't yet generate config file, launching it..."
-		brief_launch doublecmd
+		brief_launch doublecmd-qt
 	done
 	conf_backup $DCMD_CONF
 	xmlstarlet ed --inplace \
@@ -549,19 +509,6 @@ doublecmd_confs(){
 		-s //HotkeyTMP -t elem -n 'Command' -v 'cm_PanelsSplitterPerPos' \
 		-s //HotkeyTMP -t elem -n 'Param' -v 'splitpct=0' \
 		-r //HotkeyTMP -v Hotkey $DCMD_SCF
-}
-
-windscribe_confs(){
-	succ_echo "disabling windscribe launch on startup..."
-	WIND_CONF=$HOME/.config/Windscribe/Windscribe2.conf
-	while ! ls $WIND_CONF &>/dev/null; do
-		succ_echo "windscibe didn't yet generate config file, launching it..."
-		brief_launch /usr/local/windscribe/Windscribe
-	done
-	conf_backup $WIND_CONF
-	sed -i "s/guiSettings=@ByteArray(\\\b\\\x1)/guiSettings=@ByteArray(\\\b\\\x0)/g" $WIND_CONF
-	sed -i "s/guiSettings=@ByteArray()/guiSettings=@ByteArray(\\\b\\\x0)/g" $WIND_CONF
-	rm -f $HOME/.config/autostart/windscribe.desktop
 }
 
 # https://vscodium.com/#install
@@ -624,10 +571,10 @@ main_configs(){
 	icontasks_tweak
 	postinstall_cleanup
 	autologin_tweak
+	kdewallet_tweak
 
 	doublecmd_confs
 	desktop_icons
-	windscribe_confs
 	codium_confs
 	firefox_confs
 	
@@ -640,15 +587,16 @@ pip_pkg_update(){
 	# https://stackoverflow.com/questions/2720014/how-to-upgrade-all-python-packages-with-pip
 	# pip list --outdated --format=freeze | grep -v '^\-e' | cut -d = -f 1  | xargs -n1 pip install -U
 	# https://discuss.python.org/t/pip-22-3-list-list-format-freeze-can-not-be-used-with-the-outdated-option/20061/2
-	PIP_PREREQUISITES=\
-"meson dbus-devel glib2-devel python3-devel cairo cairo-devel gobject-introspection-devel \
-cairo-gobject-devel libcurl-devel openssl-devel"
+	PIP_PREREQUISITES="\
+meson dbus-devel glib2-devel python3-devel cairo cairo-devel gobject-introspection-devel \
+cairo-gobject-devel libcurl-devel openssl-devel \
+"
 
 	sudo dnf install $PIP_PREREQUISITES -y
 	ATTEMPTS=5
 	while [ $ATTEMPTS -gt 0 ]; do
 		pip_pkg_list=`pip list --outdated --format=json | jq -r '.[] | "\(.name)==\(.latest_version)"'`
-		if [ -z pip_pkg_list ];then
+		if [ -z "$pip_pkg_list" ];then
 			return
 		fi
 		for pippkg in ${pip_pkg_list[*]}; do
@@ -656,6 +604,7 @@ cairo-gobject-devel libcurl-devel openssl-devel"
 		done
 		(( ATTEMPTS-- ))
 	done
+	succ_echo "some pip packages couldn't be updated..."
 }
 
 succ_echo(){
@@ -681,7 +630,7 @@ clean_sudo_persist_err(){
 ############################################################
 ############################################################
 
-source ./commons
+source ./commons.env
 #wallpaper
 export WALLP_BASE=$(basename $WALLP)
 export WALLP_TARG="/usr/share/backgrounds/$WALLP_BASE"
@@ -695,9 +644,9 @@ export LOCKS_TARG="/usr/share/backgrounds/$LOCKS_BASE"
 export LOCKSE_TARG=$(echo $LOCKS_TARG | sed 's|/|\\/|g')
 
 
-source ./packages
+source ./packages.env
 
-export _FVER=37
+export _FVER=38
 echo "This script is meant for Fedora Workstation ${_FVER} KDE spin, using it on any other distro isn't guaranteed to work."
 echo "This script assumes a fresh install and will override certain configs."
 
