@@ -102,7 +102,7 @@ qtcreator fish inxi cpu-x sqlitebrowser wireshark \
 codium okteta rubygems strace keepassxc \
 audacity clementine ffmpegthumbnailer \
 gperftools valgrind perf hotspot iperf3 \
-kchmviewer \
+kchmviewer xdotool \
 "
 
 	sudo dnf install obs-studio -y --allowerasing
@@ -646,7 +646,7 @@ export LOCKSE_TARG=$(echo $LOCKS_TARG | sed 's|/|\\/|g')
 
 source ./packages.env
 
-export _FVER=38
+export _FVER=39
 echo "This script is meant for Fedora Workstation ${_FVER} KDE spin, using it on any other distro isn't guaranteed to work."
 echo "This script assumes a fresh install and will override certain configs."
 
@@ -688,6 +688,11 @@ else
 	
 	for i in "$@"; do
 	  case $i in
+	  	--base)
+		  sudo dnf update -y
+		  repos
+		  main_packages
+		;;
 		--all)
 		  sudo dnf update -y
 		  repos
