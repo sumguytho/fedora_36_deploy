@@ -66,14 +66,14 @@ repos(){
 	assert_cached $fusion_nonfree
 	fusion_free_base=$(basename $fusion_free)
 	fusion_nonfree_base=$(basename $fusion_nonfree)
-
 	sudo dnf install $TMP_DIR/$fusion_free_base $TMP_DIR/$fusion_nonfree_base -y
 	succ_echo "installing third-party repositories..."
 	sudo dnf install fedora-workstation-repositories -y
 	succ_echo "adding double commander repository..."
 	sudo dnf config-manager --add-repo https://download.opensuse.org/repositories/home:Alexx2000/Fedora_${_FVER}/home:Alexx2000.repo
-	succ_echo "adding tor repository..."
-	cat << EOF | sudo tee /etc/yum.repos.d/Tor.repo
+	if [ ! "x$WITHOUT_TOR" = "xy" ]; then
+		succ_echo "adding tor repository..."
+		cat << EOF | sudo tee /etc/yum.repos.d/Tor.repo
 [tor]
 name=Tor for Fedora \$releasever - \$basearch
 baseurl=https://rpm.torproject.org/fedora/\$releasever/\$basearch
@@ -82,6 +82,7 @@ gpgcheck=1
 gpgkey=https://rpm.torproject.org/fedora/public_gpg.key
 cost=100
 EOF
+	fi
 	succ_echo "adding vs-codium repository..."
 	sudo rpmkeys --import https://gitlab.com/paulcarroty/vscodium-deb-rpm-repo/-/raw/master/pub.gpg
 	printf "[gitlab.com_paulcarroty_vscodium_repo]\nname=download.vscodium.com\nbaseurl=https://download.vscodium.com/rpms/\nenabled=1\ngpgcheck=1\nrepo_gpgcheck=1\ngpgkey=https://gitlab.com/paulcarroty/vscodium-deb-rpm-repo/-/raw/master/pub.gpg\nmetadata_expire=1h" | sudo tee /etc/yum.repos.d/vscodium.repo
@@ -92,21 +93,28 @@ main_packages(){
 	succ_echo "installing main apps..."
 	DNF_PACKAGES="\
 inotify-tools xmlstarlet xterm tmux lynx \
-toilet cmatrix sl vim-common \
+toilet cmatrix sl vim-common neovim \
 firefox chromium steam gimp krita \
-vlc kate neofetch java-17-openjdk-devel \
-java-11-openjdk-devel doublecmd-qt tor \
+vlc kate fastfetch java-17-openjdk-devel \
+java-11-openjdk-devel doublecmd-qt tor obfs4 \
 python3-tools ddd graphviz filelight discord \
 telegram-desktop python3-pip torbrowser-launcher \
 qtcreator fish inxi cpu-x sqlitebrowser wireshark \
 codium okteta rubygems strace keepassxc \
 audacity clementine ffmpegthumbnailer \
-gperftools valgrind perf hotspot iperf3 \
+gperftools valgrind perf hotspot iperf3 VirtualBox \
 kchmviewer xdotool \
+uboot-tools dtc \
+tldr sshpass \
 "
 
 	sudo dnf install obs-studio -y --allowerasing
+	if [ ! "x$WITHOUT_TOR" = "xy" ]; then
+		DNF_PACKAGES="$DNF_PACKAGES torbrowser-launcher"
+	fi
 	sudo dnf install $DNF_PACKAGES -y
+	npm install -g http-proxy-to-socks
+	sudo dnf group install Multimedia -y
 	succ_echo "installing pip..."
 	python3 -m pip install --upgrade pip
 	succ_echo "installing virtualenv..."
@@ -139,12 +147,12 @@ wallpaper(){
 	sudo chmod 777 $WALLP_TARG
 	rm -f ~/Pictures/wallpapers/$WALLP_BASE
 	ln -s $WALLP_TARG ~/Pictures/wallpapers/
-	qdbus org.kde.plasmashell /PlasmaShell evaluateScript "$(cat wallp-script.js | envsubst)"
+	qdbus-qt6 org.kde.plasmashell /PlasmaShell evaluateScript "$(cat wallp-script.js | envsubst)"
 }
 
 kicker(){
 	succ_echo "replacing kickoff widget with kicker..."
-	qdbus org.kde.plasmashell /PlasmaShell evaluateScript "$(<kicker-script.js)"
+	qdbus-qt6 org.kde.plasmashell /PlasmaShell evaluateScript "$(<kicker-script.js)"
 	
 	UNNECESSARY_ARR=(\
 		applications:org.kde.dolphin.desktop \
@@ -156,7 +164,7 @@ kicker(){
 	for res in ${UNNECESSARY_ARR[*]}
 	do
 		succ_echo -e "\t $res"
-		qdbus org.kde.ActivityManager /ActivityManager/Resources/Linking UnlinkResourceFromActivity \
+		qdbus-qt6 org.kde.ActivityManager /ActivityManager/Resources/Linking UnlinkResourceFromActivity \
 			"org.kde.plasma.favorites.applications" "$res" ":any"
 	done
 }
@@ -175,6 +183,17 @@ splash_theme(){
 	kwriteconfig5 --file ksplashrc --group KSplash --key Theme "${SPLASH_BASE}"
 }
 
+# https://fedoraproject.org/wiki/GRUB_2
+grub_theme(){
+	succ_echo 'installing grub theme...'
+	assert_cached $GRUB_THEME_REPO
+	pushd $PWD
+	grub_dir_name=$(basename $GRUB_THEME_REPO)
+	cd $TMP_DIR/$grub_dir_name/Sleek\ theme-dark
+	echo -e "\nn\n" | sudo ./install.sh
+	popd
+}
+
 sddm_bg(){
 	succ_echo "setting sddm background..."
 	sudo cp $LOCKS $LOCKS_TARG
@@ -189,15 +208,10 @@ sddm_cursor(){
 	sudo kwriteconfig5 --file /etc/sddm.conf --group Theme --key CursorTheme "Breeze_Snow"
 }
 
-sddm_tm_fmt(){
-	succ_echo "changing sddm time format..."
-	sudo sed -i "s/Qt.formatTime(timeSource.data\[\"Local\"\]\[\"DateTime\"\])/Qt.formatTime(timeSource.data\[\"Local\"\]\[\"DateTime\"\], \"hh:mm:ss\")/g" /usr/share/sddm/themes/01-breeze-fedora/components/Clock.qml
-}
-
 sddm_tweaks(){
 	sddm_bg
 	sddm_cursor
-	sddm_tm_fmt
+	# sddm time now shows seconds and there is no Clock.qml anymore
 }
 
 lock_bg(){
@@ -220,7 +234,8 @@ konsole_toolbars(){
 	# just change state and hope that this blob doesn't contain something dangerously
 	# outdated, the next step is to switch to some other terminal
 	NO_TOOLSBARS_STATE="AAAA/wAAAAD9AAAAAQAAAAAAAAAAAAAAAPwCAAAAAvsAAAAiAFEAdQBpAGMAawBDAG8AbQBtAGEAbgBkAHMARABvAGMAawAAAAAA/////wAAAXwBAAAD+wAAABwAUwBTAEgATQBhAG4AYQBnAGUAcgBEAG8AYwBrAAAAAAD/////AAABFQEAAAMAAAOPAAACKAAAAAQAAAAEAAAACAAAAAj8AAAAAQAAAAIAAAACAAAAFgBtAGEAaQBuAFQAbwBvAGwAQgBhAHIAAAAAAP////8AAAAAAAAAAAAAABwAcwBlAHMAcwBpAG8AbgBUAG8AbwBsAGIAYQByAAAAAAD/////AAAAAAAAAAA="
-	kwriteconfig5 --file konsolerc --group MainWindow --key State "$NO_TOOLSBARS_STATE"
+	# I think I can get over whatever it looks like by default now
+	# kwriteconfig5 --file konsolerc --group MainWindow --key State "$NO_TOOLSBARS_STATE"
 }
 
 konsole_tweaks(){
@@ -230,7 +245,7 @@ konsole_tweaks(){
 
 clock_tweak(){
 	succ_echo "changing digital clock datetime format..."
-	qdbus org.kde.plasmashell /PlasmaShell evaluateScript "$(cat date-format-script.js)"
+	qdbus-qt6 org.kde.plasmashell /PlasmaShell evaluateScript "$(cat date-format-script.js)"
 }
 
 locale_tweak(){
@@ -241,22 +256,22 @@ locale_tweak(){
 
 cursor_tweak(){
 	succ_echo "changing cursor pack..."
-	plasma-apply-cursortheme Breeze_Snow
+	plasma-apply-cursortheme Breeze_Light
 }
 
 gtk_theme_tweak(){
 	succ_echo "changing gtk theme..."
-	qdbus org.kde.GtkConfig /GtkConfig setGtkTheme 'Breeze'
+	qdbus-qt6 org.kde.GtkConfig /GtkConfig setGtkTheme 'Breeze'
 }
 
 showdesktop_tweak(){
 	succ_echo "changing show desktop to minimize..."
-	qdbus org.kde.plasmashell /PlasmaShell evaluateScript "$(cat minimize-scipt.js)"
+	qdbus-qt6 org.kde.plasmashell /PlasmaShell evaluateScript "$(cat minimize-scipt.js)"
 }
 
 panel_reorder_tweak(){
 	succ_echo "changing panel applets order..."
-	qdbus org.kde.plasmashell /PlasmaShell evaluateScript "$(cat reorder-script.js)"
+	qdbus-qt6 org.kde.plasmashell /PlasmaShell evaluateScript "$(cat reorder-script.js)"
 }
 
 preview_delay_tweak(){
@@ -300,13 +315,13 @@ shell_prompt_format(){
 screensaving_tweaks(){
 	succ_echo "changing screensaving and screen locking behaviour..."
 	kwriteconfig5 --file kscreenlockerrc --group Daemon --key Autolock --type bool 0
-	kwriteconfig5 --file powermanagementprofilesrc --group AC --group DPMSControl --key idleTime "600"
-	kwriteconfig5 --file powermanagementprofilesrc --group AC --group SuspendSession --key idleTime "1800000"
-	kwriteconfig5 --file powermanagementprofilesrc --group AC --group SuspendSession --key suspendThenHibernate --type bool 0
-	kwriteconfig5 --file powermanagementprofilesrc --group AC --group SuspendSession --key suspendType "1"
-	# maybe make its own func later
+	# hello from plasma 6
+	kwriteconfig5 --file powerdevilrc --group AC --group Display --key DimDisplayWhenIdle --type bool 0
 	# shutdown on powerbtn press
-	kwriteconfig5 --file powermanagementprofilesrc --group AC --group HandleButtonEvents --key powerButtonAction "8"
+	kwriteconfig5 --file powerdevilrc --group AC --group SuspendAndShutdown --key powerButtonAction "8"
+	kwriteconfig5 --file powerdevilrc --group AC --group Display --key TurnOffDisplayIdleTimeoutSec "600"
+	# would you look at that, it's in seconds now
+	kwriteconfig5 --file powerdevilrc --group AC --group SuspendAndShutdown --key AutoSuspendIdleTimeoutSec "1800"
 }
 
 visual(){
@@ -321,6 +336,7 @@ visual(){
 	gtk_theme_tweak
 	sddm_tweaks
 	splash_theme
+	grub_theme
 	screensaving_tweaks
 	lock_bg
 	cursor_tweak
@@ -420,7 +436,7 @@ eclipse_jdt(){
 # stuff that is more than just 'dnf install'
 app_packages(){
 	mkdir -p ~/Apps
-	rar_unrar
+	# rar_unrar
 	autokey
 	ghidra
 	umlet
@@ -449,15 +465,18 @@ file_associations_tweak(){
 
 icontasks_tweak(){
 	succ_echo "changing pinned apps in taskbar..."
-	qdbus org.kde.plasmashell /PlasmaShell evaluateScript "$(<icontasks-script.js)"
+	qdbus-qt6 org.kde.plasmashell /PlasmaShell evaluateScript "$(<icontasks-script.js)"
 }
 
 postinstall_cleanup(){
 	succ_echo "unlinking kate from favourites..."
-	qdbus org.kde.ActivityManager /ActivityManager/Resources/Linking UnlinkResourceFromActivity \
+	qdbus-qt6 org.kde.ActivityManager /ActivityManager/Resources/Linking UnlinkResourceFromActivity \
 		"org.kde.plasma.favorites.applications" "org.kde.kate.desktop" ":any"
+	succ_echo "unlinking kwrite from favourites..."
+	qdbus-qt6 org.kde.ActivityManager /ActivityManager/Resources/Linking UnlinkResourceFromActivity \
+		"org.kde.plasma.favorites.applications" "org.kde.kwrite.desktop" ":any"
 	succ_echo "linking system monitor to favorites..."
-	qdbus org.kde.ActivityManager /ActivityManager/Resources/Linking LinkResourceToActivity \
+	qdbus-qt6 org.kde.ActivityManager /ActivityManager/Resources/Linking LinkResourceToActivity \
 		"org.kde.plasma.favorites.applications" "applications:org.kde.plasma-systemmonitor" ":any"
 	succ_echo "removing gambas3 desktop file..."
 	sudo rm -f /usr/share/applications/gambas3.desktop
@@ -478,7 +497,7 @@ doublecmd_confs(){
 	DCMD_CONF=$HOME/.config/doublecmd/doublecmd.xml
 	while ! ls $DCMD_CONF &>/dev/null; do
 		succ_echo "doublecmd didn't yet generate config file, launching it..."
-		brief_launch doublecmd-qt
+		brief_launch doublecmd
 	done
 	conf_backup $DCMD_CONF
 	xmlstarlet ed --inplace \
@@ -517,6 +536,7 @@ codium_confs(){
 	codium --install-extension ms-vscode.hexeditor
 	codium --install-extension llvm-vs-code-extensions.vscode-clangd
 	codium --install-extension ms-python.python
+	codium --install-extension yocto-project.yocto-bitbake
 
 	succ_echo "changing vs-codium user settings..."
 	CODIUM_CONF=~/.config/VSCodium/User/settings.json
@@ -534,9 +554,9 @@ desktop_icons() {
 	ln -s $HOME ~/Desktop/$USER
 	ln -s / ~/Desktop/root
 	ATTEMPTS=5
-	DESKTOP_ID=$(qdbus org.kde.plasmashell /PlasmaShell evaluateScript "print(desktops()[0].id)")
+	DESKTOP_ID=$(qdbus-qt6 org.kde.plasmashell /PlasmaShell evaluateScript "print(desktops()[0].id)")
 	while [ $ATTEMPTS -gt 0 ]; do
-		qdbus org.kde.plasmashell /PlasmaShell evaluateScript "$(cat deskpos-script.js)"
+		qdbus-qt6 org.kde.plasmashell /PlasmaShell evaluateScript "$(cat deskpos-script.js)"
 		# the config isn't adjusted fast enough after creating links
 		# after it ajdusts it can overwrite changes made by plasma script
 		sleep 2
@@ -565,6 +585,42 @@ firefox_confs() {
 	cp $FIREFOX_SETTINGS $def_prof/
 }
 
+has_tag() {
+	file=$1
+	tag=$2
+	tag_contents=$(grep "$tag" < $file)
+	if [ -z "$tag_contents" ]; then
+		return 1
+	fi
+	return 0
+}
+
+tmux_confs() {
+	succ_echo "Adding tmux autolaunch..."
+	targ_file=~/.bashrc.d/bash-tmux-tweak
+	if [ ! -e "$targ_file" ]; then
+		mkdir -p $(dirname $targ_file)
+		# https://unix.stackexchange.com/questions/43601/how-can-i-set-my-default-shell-to-start-up-tmux
+		cat >> $targ_file << EOF
+# bash-tmux-tweak
+if command -v tmux &> /dev/null && [ -n "\$PS1" ] && [[ ! "\$TERM" =~ screen ]] && [[ ! "\$TERM" =~ tmux ]] && [ -z "\$TMUX" ]; then
+  tmux
+fi
+EOF
+		chmod +x $targ_file
+	fi
+	succ_echo "Adding extra tmux configuration..."
+	targ_file="$HOME/.tmux.conf"
+	tmux_tag="#tmux-tweak"
+	if [ ! -e "$targ_file" ] || ! has_tag $targ_file $tmux_tag; then
+		# ${targ_file} just doesn't do it
+		cat >> ~/.tmux.conf << EOF
+$tmux_tag
+set -g display-panes-time 3000
+EOF
+	fi
+}
+
 # also handles stuff that depends on certain things being installed
 main_configs(){
 	file_associations_tweak
@@ -577,6 +633,7 @@ main_configs(){
 	desktop_icons
 	codium_confs
 	firefox_confs
+	tmux_confs
 	
 	succ_echo "adding user to wireshark group..."
 	sudo usermod -aG wireshark $USER
@@ -605,6 +662,14 @@ cairo-gobject-devel libcurl-devel openssl-devel \
 		(( ATTEMPTS-- ))
 	done
 	succ_echo "some pip packages couldn't be updated..."
+}
+
+extra_pip_pkgs() {
+	PIP_PKGS="\
+yt-dlp spotdl \
+"
+	succ_echo "installing extra pip packages..."
+	pip3 install ${PIP_PKGS}
 }
 
 succ_echo(){
@@ -646,7 +711,7 @@ export LOCKSE_TARG=$(echo $LOCKS_TARG | sed 's|/|\\/|g')
 
 source ./packages.env
 
-export _FVER=39
+export _FVER=40
 echo "This script is meant for Fedora Workstation ${_FVER} KDE spin, using it on any other distro isn't guaranteed to work."
 echo "This script assumes a fresh install and will override certain configs."
 
@@ -699,6 +764,7 @@ else
 		  main_packages
 		  app_packages
 		  pip_pkg_update
+		  extra_pip_pkgs
 		  main_configs
 		  visual
 		  succ_echo "a reboot is required for some changes to take effect..."
@@ -709,6 +775,7 @@ else
 		  main_packages
 		  app_packages
 		  pip_pkg_update
+		  extra_pip_pkgs
 		  ;;
 		--rm-cache)
 		  rm -rf $TMP_DIR
